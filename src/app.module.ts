@@ -37,14 +37,13 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
       imports: [AppConfigModule],
       inject: [AppConfigService],
       useFactory: (configService: AppConfigService) => ({
-        type: 'mysql',
+        type: 'postgres',
         host: configService.getDatabaseHost(),
         username: configService.getDatabaseUser(),
         password: configService.getDatabasePassword(),
         port: configService.getDatabasePort(),
         database: configService.getDatabaseName(),
         timezone: 'America/Argentina/Buenos_Aires',
-        // logging: true,
         entities: [
           Socio,
           TemporadaPileta,
