@@ -30,7 +30,6 @@ export class RegistroIngresoController {
   ) {}
 
   @Post()
-  @Private()
   @ApiOperation({
     summary: 'Crear registro de ingreso',
     description:
@@ -51,10 +50,6 @@ export class RegistroIngresoController {
   @ApiResponse({
     status: 404,
     description: 'Socio no encontrado',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado',
   })
   async create(@Body() createRegistroIngresoDto: CreateRegistroIngresoDto) {
     return await this.registroIngresoService.create(createRegistroIngresoDto);

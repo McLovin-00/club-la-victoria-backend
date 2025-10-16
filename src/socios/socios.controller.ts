@@ -177,7 +177,6 @@ export class SociosController {
   }
 
   @Get('/registro/:dni')
-  @Private()
   @ApiOperation({
     summary: 'Buscar socio por DNI para registro',
     description:
@@ -193,7 +192,6 @@ export class SociosController {
     status: 200,
     description: 'Información del socio y su tipo',
   })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
   async findOneByDni(@Param('dni') dni: string) {
     const persona = await this.sociosService.findSocioConTipo(dni);
     return persona;
