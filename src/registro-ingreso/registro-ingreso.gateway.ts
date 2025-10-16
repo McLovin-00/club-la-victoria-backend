@@ -20,7 +20,9 @@ import { JwtService } from '@nestjs/jwt';
   },
   namespace: '/registro-ingreso',
 })
-export class RegistroIngresoGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RegistroIngresoGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   private readonly logger = new Logger(RegistroIngresoGateway.name);
 
   @WebSocketServer()
@@ -35,7 +37,9 @@ export class RegistroIngresoGateway implements OnGatewayConnection, OnGatewayDis
   async handleConnection(client: Socket) {
     try {
       // Validar JWT en el handshake
-      const token = client.handshake.auth?.token || client.handshake.headers?.authorization?.replace('Bearer ', '');
+      const token =
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.replace('Bearer ', '');
 
       if (!token) {
         this.logger.warn(`Client ${client.id} disconnected: No token provided`);

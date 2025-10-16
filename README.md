@@ -132,6 +132,13 @@ src/
 
 ## Endpoints Principales
 
+### Health Check
+- `GET /health` - Verificar estado de salud del sistema
+  - ✅ Verifica conexión a base de datos
+  - ✅ Verifica uso de memoria (heap y RSS)
+  - ✅ Verifica espacio en disco disponible
+  - ✅ Retorna 200 si todo está bien, 503 si hay problemas
+
 ### Autenticación
 - `POST /api/v1/auth/login` - Iniciar sesión (rate limit: 5 intentos/5min)
 - `POST /api/v1/auth/generarPasswordHash` - Generar hash de password (protegido, solo desarrollo)

@@ -48,40 +48,48 @@ async function bootstrap() {
   // registro global del filtro
   app.useGlobalFilters(new GlobalHttpExceptionFilter());
 
-  // Configuración de Swagger
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Club La Victoria - API')
-    .setDescription(
-      'API REST para el sistema de gestión de ingresos del Club La Victoria. Permite gestionar socios, temporadas de pileta, registros de ingreso y estadísticas.',
-    )
-    .setVersion('1.0')
-    .addTag('auth', 'Autenticación y gestión de usuarios')
-    .addTag('socios', 'Gestión de socios del club')
-    .addTag('temporadas', 'Gestión de temporadas de pileta')
-    .addTag('registro-ingreso', 'Registro de ingresos al club y pileta')
-    .addTag('estadisticas', 'Estadísticas y métricas del sistema')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Ingresa el token JWT obtenido del login',
-      },
-      'JWT-auth',
-    )
-    .build();
+  // Configuración de Swagger (solo en desarrollo)
+  if (!config.isProduction()) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Club La Victoria - API')
+      .setDescription(
+        'API REST para el sistema de gestión de ingresos del Club La Victoria. Permite gestionar socios, temporadas de pileta, registros de ingreso y estadísticas.',
+      )
+      .setVersion('1.0')
+      .addTag('health', 'Health check y monitoreo del sistema')
+      .addTag('auth', 'Autenticación y gestión de usuarios')
+      .addTag('socios', 'Gestión de socios del club')
+      .addTag('temporadas', 'Gestión de temporadas de pileta')
+      .addTag('registro-ingreso', 'Registro de ingresos al club y pileta')
+      .addTag('estadisticas', 'Estadísticas y métricas del sistema')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Ingresa el token JWT obtenido del login',
+        },
+        'JWT-auth',
+      )
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
-    customSiteTitle: 'Club La Victoria API',
-    customfavIcon: 'https://nestjs.com/img/logo-small.svg',
-    customCss: '.swagger-ui .topbar { display: none }',
-  });
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      customSiteTitle: 'Club La Victoria API',
+      customfavIcon: 'https://nestjs.com/img/logo-small.svg',
+      customCss: '.swagger-ui .topbar { display: none }',
+    });
+
+    logger.log(
+      `Swagger UI available at http://localhost:${config.getPort()}/api/docs`,
+    );
+  } else {
+    logger.log('Swagger UI disabled in production mode');
+  }
 
   const PORT = config.getPort() ?? 3001;
 
   await app.listen(PORT);
   logger.log(`Server running on port ${PORT}`);
-  logger.log(`Swagger UI available at http://localhost:${PORT}/api/docs`);
 }
 void bootstrap();

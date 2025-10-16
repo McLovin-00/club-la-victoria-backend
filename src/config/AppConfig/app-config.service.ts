@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 enum VariablesEntorno {
+  NODE_ENV = 'NODE_ENV',
   PORT = 'PORT',
   DATABASE_HOST = 'DATABASE_HOST',
   DATABASE_PORT = 'DATABASE_PORT',
@@ -51,6 +52,21 @@ export class AppConfigService {
   }
 
   //Variables globales
+  getNodeEnv(): string {
+    return this.configService.get<string>(
+      VariablesEntorno.NODE_ENV,
+      'development',
+    );
+  }
+
+  isProduction(): boolean {
+    return this.getNodeEnv() === 'production';
+  }
+
+  isDevelopment(): boolean {
+    return this.getNodeEnv() === 'development';
+  }
+
   getPort(): number {
     return this.getEnvironmentVariable<number>(VariablesEntorno.PORT);
   }

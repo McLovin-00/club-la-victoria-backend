@@ -70,9 +70,7 @@ export class CloudinaryService {
               ),
             );
           } else {
-            this.logger.log(
-              `Imagen subida exitosamente en intento ${attempt}`,
-            );
+            this.logger.log(`Imagen subida exitosamente en intento ${attempt}`);
             resolve(result);
           }
         },

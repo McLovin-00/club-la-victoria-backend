@@ -14,6 +14,7 @@ import { RegistroIngreso } from './registro-ingreso/entities/registro-ingreso.en
 import { AppConfigModule } from './config/AppConfig/app-config.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { EstadisticasModule } from './estadisticas/estadisticas.module';
+import { HealthModule } from './health/health.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AUTH } from './constants/auth.constants';
@@ -33,6 +34,7 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
     RegistroIngresoModule,
     AsociacionesModule,
     EstadisticasModule,
+    HealthModule,
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],

@@ -138,7 +138,8 @@ export class RegistroIngresoController {
   @Private()
   @ApiOperation({
     summary: 'Obtener registros de ingreso por DNI',
-    description: 'Obtiene todos los registros de ingreso asociados a un DNI específico',
+    description:
+      'Obtiene todos los registros de ingreso asociados a un DNI específico',
   })
   @ApiParam({
     name: 'dni',

@@ -57,7 +57,8 @@ export class TemporadasController {
   @Private()
   @ApiOperation({
     summary: 'Listar todas las temporadas',
-    description: 'Obtiene la lista completa de temporadas registradas en el sistema',
+    description:
+      'Obtiene la lista completa de temporadas registradas en el sistema',
   })
   @ApiResponse({
     status: 200,
@@ -143,7 +144,8 @@ export class TemporadasController {
   @Private()
   @ApiOperation({
     summary: 'Obtener socios de una temporada',
-    description: 'Lista todos los socios registrados en una temporada específica',
+    description:
+      'Lista todos los socios registrados en una temporada específica',
   })
   @ApiParam({
     name: 'id',
