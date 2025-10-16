@@ -120,7 +120,14 @@ export class AppConfigService {
   }
 
   //CORS
-  getCorsOrigin(): string {
-    return this.getEnvironmentVariable<string>(VariablesEntorno.CORS_ORIGIN);
+  getCorsOrigin(): string | string[] {
+    const origins = this.getEnvironmentVariable<string>(
+      VariablesEntorno.CORS_ORIGIN,
+    );
+    // Soporta múltiples orígenes separados por coma
+    if (origins.includes(',')) {
+      return origins.split(',').map((origin) => origin.trim());
+    }
+    return origins;
   }
 }

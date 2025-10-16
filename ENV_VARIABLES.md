@@ -1,22 +1,22 @@
 # Variables de Entorno - Club La Victoria API
 
-Este documento describe todas las variables de entorno utilizadas en la aplicación.
+Este documento describe todas las variables de entorno utilizadas en la aplicaciï¿½n.
 
 ## Formato
 
-Todas las variables deben estar definidas en el archivo `.env` en la raíz del proyecto.
+Todas las variables deben estar definidas en el archivo `.env` en la raï¿½z del proyecto.
 
 **IMPORTANTE:**
-- El archivo `.env` NO debe ser commiteado a Git (ya está en `.gitignore`)
+- El archivo `.env` NO debe ser commiteado a Git (ya estï¿½ en `.gitignore`)
 - Usa `.env.example` como template para nuevos deployments
-- Rota todas las credenciales antes de deployar a producción
+- Rota todas las credenciales antes de deployar a producciï¿½n
 
 ---
 
 ## Variables Requeridas
 
 ### 1. NODE_ENV
-**Descripción:** Define el entorno de ejecución de la aplicación
+**Descripciï¿½n:** Define el entorno de ejecuciï¿½n de la aplicaciï¿½n
 
 **Tipo:** String
 
@@ -30,13 +30,13 @@ NODE_ENV=development
 ```
 
 **Notas:**
-- En `production`, el endpoint `/api/auth/generarPasswordHash` se deshabilita automáticamente por seguridad
+- En `production`, el endpoint `/api/auth/generarPasswordHash` se deshabilita automï¿½ticamente por seguridad
 - Afecta el nivel de logging y optimizaciones de NestJS
 
 ---
 
 ### 2. PORT
-**Descripción:** Puerto en el que la aplicación escuchará las peticiones HTTP
+**Descripciï¿½n:** Puerto en el que la aplicaciï¿½n escucharï¿½ las peticiones HTTP
 
 **Tipo:** Number
 
@@ -50,15 +50,15 @@ PORT=3000
 ```
 
 **Notas:**
-- Asegúrate de que el puerto no esté en uso por otra aplicación
-- En producción, generalmente se usa un proxy inverso (nginx) que redirige desde puerto 80/443
+- Asegï¿½rate de que el puerto no estï¿½ en uso por otra aplicaciï¿½n
+- En producciï¿½n, generalmente se usa un proxy inverso (nginx) que redirige desde puerto 80/443
 
 ---
 
 ## Base de Datos (MySQL)
 
 ### 3. DATABASE_HOST
-**Descripción:** Dirección del servidor MySQL
+**Descripciï¿½n:** Direcciï¿½n del servidor MySQL
 
 **Tipo:** String
 
@@ -74,7 +74,7 @@ DATABASE_HOST=192.168.1.100
 ---
 
 ### 4. DATABASE_PORT
-**Descripción:** Puerto del servidor MySQL
+**Descripciï¿½n:** Puerto del servidor MySQL
 
 **Tipo:** Number
 
@@ -88,11 +88,11 @@ DATABASE_PORT=3306
 ---
 
 ### 5. DATABASE_NAME
-**Descripción:** Nombre de la base de datos
+**Descripciï¿½n:** Nombre de la base de datos
 
 **Tipo:** String
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
 **Ejemplo:**
 ```bash
@@ -106,48 +106,48 @@ DATABASE_NAME=club_la_victoria
 ---
 
 ### 6. DATABASE_USER
-**Descripción:** Usuario de MySQL
+**Descripciï¿½n:** Usuario de MySQL
 
 **Tipo:** String
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
 **Ejemplo:**
 ```bash
 DATABASE_USER=root
-# En producción usar un usuario específico
+# En producciï¿½n usar un usuario especï¿½fico
 DATABASE_USER=club_victoria_user
 ```
 
 **Seguridad:**
-- En producción, NO usar `root`
-- Crear un usuario específico con permisos limitados a esta base de datos únicamente
+- En producciï¿½n, NO usar `root`
+- Crear un usuario especï¿½fico con permisos limitados a esta base de datos ï¿½nicamente
 
 ---
 
 ### 7. DATABASE_PASSWORD
-**Descripción:** Contraseña del usuario de MySQL
+**Descripciï¿½n:** Contraseï¿½a del usuario de MySQL
 
 **Tipo:** String
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
 **Ejemplo:**
 ```bash
 DATABASE_PASSWORD=root
-# En producción usar password seguro
+# En producciï¿½n usar password seguro
 DATABASE_PASSWORD=MyS3cur3P@ssw0rd!2024
 ```
 
 **Seguridad:**
-- **NUNCA** usar contraseñas débiles en producción
-- Mínimo 12 caracteres con mayúsculas, minúsculas, números y símbolos
-- Rotar periódicamente
+- **NUNCA** usar contraseï¿½as dï¿½biles en producciï¿½n
+- Mï¿½nimo 12 caracteres con mayï¿½sculas, minï¿½sculas, nï¿½meros y sï¿½mbolos
+- Rotar periï¿½dicamente
 
 ---
 
 ### 8. DATABASE_TIMEZONE
-**Descripción:** Timezone de la base de datos
+**Descripciï¿½n:** Timezone de la base de datos
 
 **Tipo:** String
 
@@ -165,18 +165,18 @@ DATABASE_TIMEZONE=SYSTEM
 
 ---
 
-## Autenticación JWT
+## Autenticaciï¿½n JWT
 
 ### 9. JWT_SECRET
-**Descripción:** Clave secreta para firmar los tokens JWT
+**Descripciï¿½n:** Clave secreta para firmar los tokens JWT
 
 **Tipo:** String
 
-**Longitud mínima:** 32 caracteres
+**Longitud mï¿½nima:** 32 caracteres
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
-**  CRÍTICO PARA SEGURIDAD  **
+**ï¿½ CRï¿½TICO PARA SEGURIDAD ï¿½**
 
 **Ejemplo:**
 ```bash
@@ -188,24 +188,24 @@ JWT_SECRET=ae1b3b7da4d3556d28829affbc9d138ae533cb6dfcacc922a3964e072e1dda8f
 **Seguridad:**
 - **NUNCA** usar secretos predecibles o cortos
 - **DEBE** ser generado aleatoriamente
-- **ROTAR** antes de cada deployment a producción
+- **ROTAR** antes de cada deployment a producciï¿½n
 - Si este secret se compromete, todos los tokens quedan comprometidos
 
 ---
 
 ### 10. JWT_EXPIRES_IN
-**Descripción:** Tiempo de expiración de los tokens JWT (en segundos)
+**Descripciï¿½n:** Tiempo de expiraciï¿½n de los tokens JWT (en segundos)
 
 **Tipo:** Number
 
-**Valor por defecto:** `604800` (7 días)
+**Valor por defecto:** `604800` (7 dï¿½as)
 
 **Ejemplo:**
 ```bash
-# 7 días
+# 7 dï¿½as
 JWT_EXPIRES_IN=604800
 
-# 1 día
+# 1 dï¿½a
 JWT_EXPIRES_IN=86400
 
 # 1 hora
@@ -213,56 +213,56 @@ JWT_EXPIRES_IN=3600
 ```
 
 **Notas:**
-- Valores más bajos = más seguro pero usuarios deben re-autenticarse más seguido
-- Valores más altos = más conveniente pero mayor ventana si un token es robado
-- Recomendado: 7-30 días para aplicaciones internas
+- Valores mï¿½s bajos = mï¿½s seguro pero usuarios deben re-autenticarse mï¿½s seguido
+- Valores mï¿½s altos = mï¿½s conveniente pero mayor ventana si un token es robado
+- Recomendado: 7-30 dï¿½as para aplicaciones internas
 
 ---
 
-## Cloudinary (Almacenamiento de Imágenes)
+## Cloudinary (Almacenamiento de Imï¿½genes)
 
 ### 11. CLOUDINARY_NAME
-**Descripción:** Nombre de la cuenta de Cloudinary (Cloud Name)
+**Descripciï¿½n:** Nombre de la cuenta de Cloudinary (Cloud Name)
 
 **Tipo:** String
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
 **Ejemplo:**
 ```bash
 CLOUDINARY_NAME=duvoj0yeh
 ```
 
-**Dónde encontrarlo:**
+**Dï¿½nde encontrarlo:**
 - Dashboard de Cloudinary > Settings > Account > Cloud name
 
 ---
 
 ### 12. CLOUDINARY_API_KEY
-**Descripción:** API Key de Cloudinary
+**Descripciï¿½n:** API Key de Cloudinary
 
 **Tipo:** String
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
 **Ejemplo:**
 ```bash
 CLOUDINARY_API_KEY=854539271269485
 ```
 
-**Dónde encontrarlo:**
+**Dï¿½nde encontrarlo:**
 - Dashboard de Cloudinary > Settings > Access Keys > API Key
 
 ---
 
 ### 13. CLOUDINARY_API_SECRET
-**Descripción:** API Secret de Cloudinary
+**Descripciï¿½n:** API Secret de Cloudinary
 
 **Tipo:** String
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
-**  CRÍTICO PARA SEGURIDAD  **
+**ï¿½ CRï¿½TICO PARA SEGURIDAD ï¿½**
 
 **Ejemplo:**
 ```bash
@@ -270,11 +270,11 @@ CLOUDINARY_API_SECRET=1gPxfN8Kr9GN7YAI-wXnJAyLrM8
 ```
 
 **Seguridad:**
-- **ROTAR** antes de cada deployment a producción
+- **ROTAR** antes de cada deployment a producciï¿½n
 - Se puede regenerar desde el dashboard de Cloudinary
 - Si se compromete, regenerar inmediatamente en Cloudinary
 
-**Dónde encontrarlo:**
+**Dï¿½nde encontrarlo:**
 - Dashboard de Cloudinary > Settings > Access Keys > API Secret
 
 ---
@@ -282,35 +282,39 @@ CLOUDINARY_API_SECRET=1gPxfN8Kr9GN7YAI-wXnJAyLrM8
 ## CORS (Cross-Origin Resource Sharing)
 
 ### 14. CORS_ORIGIN
-**Descripción:** Origen permitido para peticiones CORS
+**Descripciï¿½n:** Origen(es) permitido(s) para peticiones CORS
 
-**Tipo:** String (URL)
+**Tipo:** String (URL) o mï¿½ltiples URLs separadas por coma
 
-**Requerido:** Sí
+**Requerido:** Sï¿½
 
-**  CRÍTICO PARA SEGURIDAD  **
+**ï¿½ CRï¿½TICO PARA SEGURIDAD ï¿½**
 
 **Ejemplo:**
 ```bash
 # Desarrollo local
 CORS_ORIGIN=http://localhost:3000
 
-# Producción
+# Producciï¿½n
 CORS_ORIGIN=https://clublavictoria.com
 
-# Múltiples orígenes (separados por coma)
+# Mï¿½ltiples orï¿½genes (separados por coma)
 CORS_ORIGIN=https://clublavictoria.com,https://app.clublavictoria.com
+
+# Desarrollo con mï¿½ltiples dispositivos en red local
+CORS_ORIGIN=http://localhost:3000,http://192.168.1.2:3000,http://181.92.101.133
 ```
 
 **Seguridad:**
-- **NUNCA** usar `*` (wildcard) en producción
+- **NUNCA** usar `*` (wildcard) en producciï¿½n
 - Solo configurar los dominios exactos que necesitan acceso
 - Incluir el protocolo (`http://` o `https://`)
 - No incluir barra final (`/`)
+- Para mï¿½ltiples orï¿½genes, separarlos con coma sin espacios extras (los espacios se eliminan automï¿½ticamente)
 
 ---
 
-## Configuración de Ejemplo
+## Configuraciï¿½n de Ejemplo
 
 ### .env para Desarrollo
 ```bash
@@ -334,7 +338,7 @@ CLOUDINARY_API_SECRET=1gPxfN8Kr9GN7YAI-wXnJAyLrM8
 CORS_ORIGIN=http://localhost:3000
 ```
 
-### .env para Producción
+### .env para Producciï¿½n
 ```bash
 NODE_ENV=production
 PORT=3000
@@ -355,7 +359,7 @@ CLOUDINARY_NAME=<YOUR_CLOUDINARY_NAME>
 CLOUDINARY_API_KEY=<YOUR_API_KEY>
 CLOUDINARY_API_SECRET=<NEW_ROTATED_SECRET>
 
-# DOMINIO REAL DE PRODUCCIÓN
+# DOMINIO REAL DE PRODUCCIï¿½N
 CORS_ORIGIN=https://tudominio.com
 ```
 
@@ -363,23 +367,23 @@ CORS_ORIGIN=https://tudominio.com
 
 ## Checklist de Seguridad
 
-Antes de deployar a producción, verifica:
+Antes de deployar a producciï¿½n, verifica:
 
 - [ ] `NODE_ENV=production`
 - [ ] `JWT_SECRET` generado aleatoriamente (32+ caracteres)
-- [ ] `DATABASE_PASSWORD` es fuerte y único
+- [ ] `DATABASE_PASSWORD` es fuerte y ï¿½nico
 - [ ] `CLOUDINARY_API_SECRET` fue rotado
-- [ ] `CORS_ORIGIN` configurado con dominio específico (NO `*`)
-- [ ] Archivo `.env` NO está en Git
+- [ ] `CORS_ORIGIN` configurado con dominio especï¿½fico (NO `*`)
+- [ ] Archivo `.env` NO estï¿½ en Git
 - [ ] Todas las credenciales son diferentes de desarrollo
-- [ ] Variables de entorno configuradas en el servidor de producción
+- [ ] Variables de entorno configuradas en el servidor de producciï¿½n
 
 ---
 
 ## Troubleshooting
 
 ### Error: "Config validation error"
-Verifica que todas las variables requeridas estén presentes y con el formato correcto.
+Verifica que todas las variables requeridas estï¿½n presentes y con el formato correcto.
 
 ### Error: "JWT_SECRET must be at least 32 characters long"
 Genera un nuevo secret:
@@ -389,7 +393,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ### Error: "Unable to connect to database"
 Verifica:
-- El servidor MySQL está corriendo
+- El servidor MySQL estï¿½ corriendo
 - Las credenciales son correctas
 - El host y puerto son accesibles
 - La base de datos existe
@@ -398,5 +402,5 @@ Verifica:
 Verifica:
 - Las credenciales de Cloudinary son correctas
 - La cuenta tiene espacio disponible
-- La conexión a internet es estable
-- El retry logic (3 intentos) se está ejecutando
+- La conexiï¿½n a internet es estable
+- El retry logic (3 intentos) se estï¿½ ejecutando
