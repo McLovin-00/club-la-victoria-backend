@@ -42,7 +42,7 @@ export class RegistroIngreso {
   })
   tipoIngreso!: TipoIngreso;
 
-  @Column({ type: 'tinyint', default: 0, name: 'habilita_pileta' })
+  @Column({ type: 'boolean', default: false, name: 'habilita_pileta' })
   habilitaPileta!: boolean;
 
   @Column({
