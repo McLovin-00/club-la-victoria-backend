@@ -83,4 +83,13 @@ export class CreateSocioDto {
   })
   @IsEnum(Genero)
   genero!: Genero;
+
+  @ApiProperty({
+    description: 'Foto del socio (archivo de imagen)',
+    type: 'string',
+    format: 'binary',
+    required: false,
+  })
+  @IsOptional()
+  foto?: any;
 }

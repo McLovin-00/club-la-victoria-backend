@@ -128,6 +128,8 @@ export class SociosController {
     @Body() updateSocioDto: UpdateSocioDto,
     @UploadedFile(new ImageValidationPipe()) file?: Express.Multer.File,
   ) {
+    console.log('updateSocioDto:', updateSocioDto);
+    console.log('file recibido:', file ? `${file.originalname} (${file.size} bytes)` : 'NO HAY ARCHIVO');
     return this.sociosService.update(id, updateSocioDto, file);
   }
 

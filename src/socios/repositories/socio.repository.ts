@@ -62,6 +62,8 @@ export class SocioRepository extends Repository<Socio> {
       socio.fotoUrl = createSocioDto.fotoUrl;
     }
 
+    console.log("socio", socio);
+
     return await this.save(socio);
   }
 

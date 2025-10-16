@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsBoolean,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 import { Estado, Genero } from './create-socio.dto';
 
 export class UpdateSocioDto {
@@ -44,4 +45,13 @@ export class UpdateSocioDto {
   @IsBoolean()
   @IsOptional()
   eliminarFotoVieja?: boolean;
+
+  @ApiProperty({
+    description: 'Foto del socio (archivo de imagen)',
+    type: 'string',
+    format: 'binary',
+    required: false,
+  })
+  @IsOptional()
+  foto?: any;
 }
