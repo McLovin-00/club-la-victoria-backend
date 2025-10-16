@@ -15,8 +15,8 @@ import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
+    origin: '*', // Permitir todas las conexiones (app móvil + web)
+    credentials: false,
   },
   namespace: '/registro-ingreso',
 })
@@ -36,28 +36,6 @@ export class RegistroIngresoGateway
 
   async handleConnection(client: Socket) {
     try {
-      // Validar JWT en el handshake
-      const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.replace('Bearer ', '');
-
-      if (!token) {
-        this.logger.warn(`Client ${client.id} disconnected: No token provided`);
-        client.emit('error', { message: 'Authentication token required' });
-        client.disconnect();
-        return;
-      }
-
-      // Verificar el token
-      try {
-        await this.jwtService.verifyAsync(token);
-      } catch (error) {
-        this.logger.warn(`Client ${client.id} disconnected: Invalid token`);
-        client.emit('error', { message: 'Invalid or expired token' });
-        client.disconnect();
-        return;
-      }
-
       this.logger.log(`Client connected: ${client.id}`);
 
       const registros = await this.returnRegistrosPiletaHoy();
