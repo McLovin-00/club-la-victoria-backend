@@ -39,7 +39,7 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
       imports: [AppConfigModule],
       inject: [AppConfigService],
       useFactory: (configService: AppConfigService) => ({
-        type: 'postgres',
+        type: 'mysql',
         host: configService.getDatabaseHost(),
         username: configService.getDatabaseUser(),
         password: configService.getDatabasePassword(),
