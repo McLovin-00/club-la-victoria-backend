@@ -273,4 +273,9 @@ export class SociosService {
 
     return { socio, tipoPersona };
   }
+
+  async findOneByDniReserva(dni: string) {
+    const socio = await this.socioRepository.findOne({ where: { dni } });
+    return !!socio;
+  }
 }

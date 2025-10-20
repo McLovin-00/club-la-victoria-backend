@@ -199,4 +199,23 @@ export class SociosController {
     const persona = await this.sociosService.findSocioConTipo(dni);
     return persona;
   }
+
+  @Get('/reserva/:dni')
+  @ApiOperation({
+    summary: 'Verificar existencia de socio por DNI para reserva',
+    description: 'Obtiene con un booleano si el dni del socio existe',
+  })
+  @ApiParam({
+    name: 'dni',
+    description: 'DNI del socio',
+    type: String,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Socio encontrado',
+  })
+  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  findOneByDniReserva(@Param('dni') dni: string) {
+    return this.sociosService.findOneByDniReserva(dni);
+  }
 }
