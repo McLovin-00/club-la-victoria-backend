@@ -114,6 +114,8 @@ export class TemporadasService {
         'socio.fotoUrl',
         'socio.fechaAlta',
       ])
+      .orderBy('socio.apellido', 'ASC')
+      .addOrderBy('socio.nombre', 'ASC')
       .getMany();
 
     return socios.map((asociacion) => ({
