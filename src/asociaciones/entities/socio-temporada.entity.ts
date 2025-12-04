@@ -1,5 +1,5 @@
-import { Socio } from 'src/socios/entities/socio.entity';
-import { TemporadaPileta } from 'src/temporadas/entities/temporada.entity';
+import { Socio } from '../../socios/entities/socio.entity';
+import { TemporadaPileta } from '../../temporadas/entities/temporada.entity';
 import {
   Column,
   Entity,

@@ -5,7 +5,7 @@ import {
   OneToMany,
   Index,
 } from 'typeorm';
-import { SocioTemporada } from 'src/asociaciones/entities/socio-temporada.entity';
+import { SocioTemporada } from '../../asociaciones/entities/socio-temporada.entity';
 
 @Entity('temporada_pileta')
 export class TemporadaPileta {

@@ -28,7 +28,7 @@ export class CloudinaryService {
   ): Promise<CloudinaryResponse> {
     return new Promise<CloudinaryResponse>((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        async (error, result) => {
+        (error, result) => {
           if (error) {
             this.logger.error(
               `Error subiendo imagen a Cloudinary (intento ${attempt}/${this.MAX_RETRIES})`,
@@ -40,18 +40,11 @@ export class CloudinaryService {
               this.logger.log(
                 `Reintentando subida en ${this.RETRY_DELAY}ms...`,
               );
-              await new Promise((resolve) =>
-                setTimeout(resolve, this.RETRY_DELAY),
-              );
-              try {
-                const retryResult = await this.uploadWithRetry(
-                  File,
-                  attempt + 1,
-                );
-                resolve(retryResult);
-              } catch (retryError) {
-                reject(retryError);
-              }
+              setTimeout(() => {
+                this.uploadWithRetry(File, attempt + 1)
+                  .then(resolve)
+                  .catch(reject);
+              }, this.RETRY_DELAY);
             } else {
               reject(
                 new CustomError(

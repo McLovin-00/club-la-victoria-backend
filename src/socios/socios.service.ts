@@ -237,8 +237,52 @@ export class SociosService {
     return { message: 'Socio eliminado exitosamente' };
   }
 
-  async findSocioConTipo(dni: string) {
-    const socio = await this.socioRepository.findOne({ where: { dni } });
+  /**
+   * Busca socios por nombre o apellido (case insensitive)
+   * @param query - Texto a buscar en nombre o apellido
+   * @returns Lista de socios que coinciden con la búsqueda (máximo 10)
+   */
+  async findByName(query: string) {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
+    const socios = await this.socioRepository
+      .createQueryBuilder('socio')
+      .where('LOWER(socio.nombre) LIKE LOWER(:query)', {
+        query: `%${query}%`,
+      })
+      .orWhere('LOWER(socio.apellido) LIKE LOWER(:query)', {
+        query: `%${query}%`,
+      })
+      .andWhere('socio.estado = :estado', { estado: 'ACTIVO' })
+      .orderBy('socio.apellido', 'ASC')
+      .addOrderBy('socio.nombre', 'ASC')
+      .limit(10)
+      .getMany();
+
+    return socios;
+  }
+
+  /**
+   * Busca un socio por DNI o ID y determina su tipo (SOCIO_CLUB, SOCIO_PILETA o NO_SOCIO)
+   * @param identifier - DNI (string) o ID (number convertido a string) del socio
+   */
+  async findSocioConTipo(identifier: string) {
+    let socio;
+
+    // Si el identificador es numérico y tiene menos de 6 dígitos, asumir que es un ID
+    const isNumeric = /^\d+$/.test(identifier);
+    if (isNumeric && identifier.length <= 6) {
+      socio = await this.socioRepository.findOne({
+        where: { id: parseInt(identifier, 10) },
+      });
+    } else {
+      // Buscar por DNI
+      socio = await this.socioRepository.findOne({
+        where: { dni: identifier },
+      });
+    }
 
     if (!socio) {
       return { socio: null, tipoPersona: TipoPersona.NOSOCIO };

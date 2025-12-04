@@ -91,5 +91,5 @@ export class CreateSocioDto {
     required: false,
   })
   @IsOptional()
-  foto?: any;
+  foto?: Express.Multer.File;
 }

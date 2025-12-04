@@ -5,8 +5,8 @@ import {
   Index,
   OneToMany,
 } from 'typeorm';
-import { SocioTemporada } from 'src/asociaciones/entities/socio-temporada.entity';
-import { RegistroIngreso } from 'src/registro-ingreso/entities/registro-ingreso.entity';
+import { SocioTemporada } from '../../asociaciones/entities/socio-temporada.entity';
+import { RegistroIngreso } from '../../registro-ingreso/entities/registro-ingreso.entity';
 
 @Entity('socio')
 export class Socio {

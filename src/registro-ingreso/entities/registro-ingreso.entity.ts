@@ -2,7 +2,6 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  CreateDateColumn,
   ManyToOne,
   JoinColumn,
   Index,
@@ -53,13 +52,13 @@ export class RegistroIngreso {
   })
   metodoPago!: MetodoPago;
 
-  @Column({ type: 'int', nullable: false, name: 'importe' })
-  importe!: number;
+  @Column({ type: 'int', nullable: true, name: 'importe' })
+  importe?: number;
 
-  @CreateDateColumn({
-    type: 'timestamp',
-    default: () => 'CURRENT_TIMESTAMP',
+  @Column({
+    type: 'timestamptz',
     name: 'fecha_hora_ingreso',
+    default: () => 'CURRENT_TIMESTAMP',
   })
   fechaHoraIngreso!: Date;
 

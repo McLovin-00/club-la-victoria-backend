@@ -179,15 +179,35 @@ export class SociosController {
     return this.sociosService.remove(id);
   }
 
-  @Get('/registro/:dni')
+  @Get('/buscar/nombre')
   @ApiOperation({
-    summary: 'Buscar socio por DNI para registro',
+    summary: 'Buscar socios por nombre o apellido',
     description:
-      'Busca un socio por DNI y devuelve sus datos junto con su tipo (SOCIO_CLUB, SOCIO_PILETA o NO_SOCIO)',
+      'Busca socios activos cuyo nombre o apellido coincida con la búsqueda (máximo 10 resultados)',
+  })
+  @ApiQuery({
+    name: 'q',
+    description: 'Texto a buscar en nombre o apellido',
+    type: String,
+    example: 'Juan',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de socios encontrados',
+  })
+  async findByName(@Query('q') query: string) {
+    return this.sociosService.findByName(query);
+  }
+
+  @Get('/registro/:identifier')
+  @ApiOperation({
+    summary: 'Buscar socio por DNI o ID para registro',
+    description:
+      'Busca un socio por DNI o ID y devuelve sus datos junto con su tipo (SOCIO_CLUB, SOCIO_PILETA o NO_SOCIO)',
   })
   @ApiParam({
-    name: 'dni',
-    description: 'DNI del socio',
+    name: 'identifier',
+    description: 'DNI o ID del socio',
     type: String,
     example: '12345678',
   })
@@ -195,8 +215,8 @@ export class SociosController {
     status: 200,
     description: 'Información del socio y su tipo',
   })
-  async findOneByDni(@Param('dni') dni: string) {
-    const persona = await this.sociosService.findSocioConTipo(dni);
+  async findForRegistro(@Param('identifier') identifier: string) {
+    const persona = await this.sociosService.findSocioConTipo(identifier);
     return persona;
   }
 

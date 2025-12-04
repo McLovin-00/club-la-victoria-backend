@@ -53,5 +53,5 @@ export class UpdateSocioDto {
     required: false,
   })
   @IsOptional()
-  foto?: any;
+  foto?: Express.Multer.File;
 }
