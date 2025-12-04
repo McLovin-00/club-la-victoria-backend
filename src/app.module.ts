@@ -53,7 +53,7 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
           Usuario,
           RegistroIngreso,
         ],
-        synchronize: false,
+        synchronize: configService.getNodeEnv() === 'development',
       }),
     }),
     CloudinaryModule,
