@@ -136,49 +136,6 @@ export class SociosController {
     return this.sociosService.update(id, updateSocioDto, file);
   }
 
-  @Get(':id')
-  @Private()
-  @ApiOperation({
-    summary: 'Obtener socio por ID',
-    description: 'Obtiene los detalles de un socio específico',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'ID del socio',
-    type: Number,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Socio encontrado',
-  })
-  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.sociosService.findOne(id);
-  }
-
-  @Delete(':id')
-  @Private()
-  @ApiOperation({
-    summary: 'Eliminar socio',
-    description:
-      'Elimina un socio del sistema. También elimina su foto de Cloudinary si tiene.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'ID del socio',
-    type: Number,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Socio eliminado exitosamente',
-  })
-  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.sociosService.remove(id);
-  }
-
   @Get('/buscar/nombre')
   @ApiOperation({
     summary: 'Buscar socios por nombre o apellido',
@@ -237,5 +194,48 @@ export class SociosController {
   @ApiResponse({ status: 404, description: 'Socio no encontrado' })
   findOneByDniReserva(@Param('dni') dni: string) {
     return this.sociosService.findOneByDniReserva(dni);
+  }
+
+  @Get(':id')
+  @Private()
+  @ApiOperation({
+    summary: 'Obtener socio por ID',
+    description: 'Obtiene los detalles de un socio específico',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID del socio',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Socio encontrado',
+  })
+  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.sociosService.findOne(id);
+  }
+
+  @Delete(':id')
+  @Private()
+  @ApiOperation({
+    summary: 'Eliminar socio',
+    description:
+      'Elimina un socio del sistema. También elimina su foto de Cloudinary si tiene.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID del socio',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Socio eliminado exitosamente',
+  })
+  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.sociosService.remove(id);
   }
 }
