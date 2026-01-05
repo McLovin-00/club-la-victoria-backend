@@ -88,8 +88,9 @@ async function bootstrap() {
   }
 
   const PORT = config.getPort() ?? 3001;
+  const HOST = config.getHost();
 
-  await app.listen(PORT);
-  logger.log(`Server running on port ${PORT}`);
+  await app.listen(PORT, HOST);
+  logger.log(`Server running on http://${HOST}:${PORT}`);
 }
 void bootstrap();

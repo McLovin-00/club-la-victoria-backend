@@ -25,7 +25,7 @@ export class SociosService {
     private readonly asociacionesRepository: AsociacionesRepository,
     private readonly temporadaPiletaRepository: TemporadaPiletaRepository,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   async create(createSocioDto: CreateSocioDto, file?: Express.Multer.File) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -239,7 +239,8 @@ export class SociosService {
 
   /**
    * Busca socios por nombre o apellido (case insensitive)
-   * @param query - Texto a buscar en nombre o apellido
+   * Soporta búsquedas con múltiples palabras (ej: "cabrera ale" encuentra "Alejandro Cabrera")
+   * @param query - Texto a buscar en nombre o apellido (puede contener múltiples palabras)
    * @returns Lista de socios que coinciden con la búsqueda (máximo 10)
    */
   async findByName(query: string) {
@@ -247,15 +248,31 @@ export class SociosService {
       return [];
     }
 
-    const socios = await this.socioRepository
+    // Dividir el query en palabras y filtrar vacíos
+    const words = query
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((word) => word.length > 0);
+
+    if (words.length === 0) {
+      return [];
+    }
+
+    const qb = this.socioRepository
       .createQueryBuilder('socio')
-      .where('LOWER(socio.nombre) LIKE LOWER(:query)', {
-        query: `%${query}%`,
-      })
-      .orWhere('LOWER(socio.apellido) LIKE LOWER(:query)', {
-        query: `%${query}%`,
-      })
-      .andWhere('socio.estado = :estado', { estado: 'ACTIVO' })
+      .where('socio.estado = :estado', { estado: 'ACTIVO' });
+
+    // Para cada palabra, agregar condición AND que busque en nombre O apellido
+    words.forEach((word, index) => {
+      const paramName = `word${index}`;
+      qb.andWhere(
+        `(LOWER(socio.nombre) LIKE :${paramName} OR LOWER(socio.apellido) LIKE :${paramName})`,
+        { [paramName]: `%${word}%` },
+      );
+    });
+
+    const socios = await qb
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .limit(10)

@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 enum VariablesEntorno {
   NODE_ENV = 'NODE_ENV',
   PORT = 'PORT',
+  HOST = 'HOST',
   DATABASE_HOST = 'DATABASE_HOST',
   DATABASE_PORT = 'DATABASE_PORT',
   DATABASE_NAME = 'DATABASE_NAME',
@@ -26,7 +27,7 @@ enum VariablesEntorno {
 export class AppConfigService {
   private readonly logger = new Logger(AppConfigService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   private getEnvironmentVariable<T>(key: string): T {
     try {
@@ -69,6 +70,10 @@ export class AppConfigService {
 
   getPort(): number {
     return this.getEnvironmentVariable<number>(VariablesEntorno.PORT);
+  }
+
+  getHost(): string {
+    return this.configService.get<string>(VariablesEntorno.HOST, 'localhost');
   }
 
   //Variables de entorno DB

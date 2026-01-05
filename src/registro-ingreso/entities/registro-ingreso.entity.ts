@@ -33,6 +33,12 @@ export class RegistroIngreso {
   @Column({ type: 'varchar', length: 20, nullable: true, name: 'dni_no_socio' })
   dniNoSocio?: string;
 
+  @Column({ type: 'varchar', length: 100, nullable: true, name: 'nombre_no_socio' })
+  nombreNoSocio?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true, name: 'apellido_no_socio' })
+  apellidoNoSocio?: string;
+
   @Column({
     type: 'enum',
     enum: TipoIngreso,

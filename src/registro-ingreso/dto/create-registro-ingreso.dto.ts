@@ -39,6 +39,22 @@ export class CreateRegistroIngresoDto {
   )
   dniNoSocio?: string;
 
+  @ApiPropertyOptional({
+    description: 'Nombre del no socio (opcional)',
+    example: 'Juan',
+  })
+  @IsString()
+  @IsOptional()
+  nombreNoSocio?: string;
+
+  @ApiPropertyOptional({
+    description: 'Apellido del no socio (opcional)',
+    example: 'Pérez',
+  })
+  @IsString()
+  @IsOptional()
+  apellidoNoSocio?: string;
+
   @ApiProperty({
     description: 'Tipo de ingreso de la persona',
     enum: TipoIngreso,
