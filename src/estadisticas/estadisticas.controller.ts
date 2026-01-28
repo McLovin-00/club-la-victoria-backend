@@ -21,7 +21,8 @@ export class EstadisticasController {
   @ApiOperation({
     summary: 'Obtener estadísticas diarias',
     description:
-      'Obtiene las estadísticas de ingresos para una fecha específica, incluyendo totales por tipo de ingreso, categoría y comparativas',
+      'Obtiene las estadísticas de ingresos para una fecha específica, incluyendo totales por tipo de ingreso, categoría y comparativas. ' +
+      'Permite buscar registros por nombre y apellido usando el parámetro searchTerm.',
   })
   @ApiQuery({
     name: 'date',
@@ -29,6 +30,13 @@ export class EstadisticasController {
     type: String,
     description: 'Fecha para obtener estadísticas (formato: YYYY-MM-DD)',
     example: '2024-01-15',
+  })
+  @ApiQuery({
+    name: 'searchTerm',
+    required: false,
+    type: String,
+    description: 'Término de búsqueda para filtrar por nombre o apellido (búsqueda parcial, case-insensitive)',
+    example: 'Perez',
   })
   @ApiResponse({
     status: 200,
@@ -42,7 +50,8 @@ export class EstadisticasController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   async getStatistics(
     @Query('date') dateString: string,
+    @Query('searchTerm') searchTerm?: string,
   ): Promise<StatisticsResponseDto> {
-    return this.estadisticasService.getDailyStatistics(dateString);
+    return this.estadisticasService.getDailyStatistics(dateString, searchTerm);
   }
 }
