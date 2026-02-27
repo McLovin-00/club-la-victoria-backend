@@ -10,33 +10,114 @@ import {
   TipoIngreso,
   MetodoPago,
 } from '../registro-ingreso/entities/registro-ingreso.entity';
+import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.entity';
 import * as bcrypt from 'bcrypt';
 import { AUTH } from '../constants/auth.constants';
 
 // Datos realistas para Argentina
 const NOMBRES_MASCULINOS = [
-  'Juan', 'Carlos', 'Miguel', 'José', 'Luis', 'Pedro', 'Ricardo', 'Fernando',
-  'Diego', 'Martín', 'Pablo', 'Alejandro', 'Sebastián', 'Nicolás', 'Gonzalo',
-  'Matías', 'Lucas', 'Tomás', 'Santiago', 'Agustín', 'Facundo', 'Ezequiel',
+  'Juan',
+  'Carlos',
+  'Miguel',
+  'José',
+  'Luis',
+  'Pedro',
+  'Ricardo',
+  'Fernando',
+  'Diego',
+  'Martín',
+  'Pablo',
+  'Alejandro',
+  'Sebastián',
+  'Nicolás',
+  'Gonzalo',
+  'Matías',
+  'Lucas',
+  'Tomás',
+  'Santiago',
+  'Agustín',
+  'Facundo',
+  'Ezequiel',
 ];
 
 const NOMBRES_FEMENINOS = [
-  'María', 'Ana', 'Laura', 'Florencia', 'Camila', 'Lucía', 'Sofía', 'Valentina',
-  'Carolina', 'Julieta', 'Martina', 'Victoria', 'Romina', 'Paula', 'Daniela',
-  'Gabriela', 'Andrea', 'Cecilia', 'Eugenia', 'Milagros', 'Agustina', 'Rocío',
+  'María',
+  'Ana',
+  'Laura',
+  'Florencia',
+  'Camila',
+  'Lucía',
+  'Sofía',
+  'Valentina',
+  'Carolina',
+  'Julieta',
+  'Martina',
+  'Victoria',
+  'Romina',
+  'Paula',
+  'Daniela',
+  'Gabriela',
+  'Andrea',
+  'Cecilia',
+  'Eugenia',
+  'Milagros',
+  'Agustina',
+  'Rocío',
 ];
 
 const APELLIDOS = [
-  'González', 'Rodríguez', 'García', 'Fernández', 'López', 'Martínez', 'Pérez',
-  'Sánchez', 'Romero', 'Díaz', 'Torres', 'Ruiz', 'Álvarez', 'Acosta', 'Castro',
-  'Moreno', 'Gómez', 'Flores', 'Benítez', 'Medina', 'Herrera', 'Núñez',
-  'Cabrera', 'Molina', 'Silva', 'Ortiz', 'Aguirre', 'Suárez', 'Ríos', 'Vera',
+  'González',
+  'Rodríguez',
+  'García',
+  'Fernández',
+  'López',
+  'Martínez',
+  'Pérez',
+  'Sánchez',
+  'Romero',
+  'Díaz',
+  'Torres',
+  'Ruiz',
+  'Álvarez',
+  'Acosta',
+  'Castro',
+  'Moreno',
+  'Gómez',
+  'Flores',
+  'Benítez',
+  'Medina',
+  'Herrera',
+  'Núñez',
+  'Cabrera',
+  'Molina',
+  'Silva',
+  'Ortiz',
+  'Aguirre',
+  'Suárez',
+  'Ríos',
+  'Vera',
 ];
 
 const CALLES = [
-  'San Martín', 'Belgrano', 'Rivadavia', 'Sarmiento', 'Mitre', 'Moreno',
-  'Colón', '25 de Mayo', '9 de Julio', 'España', 'Italia', 'Francia',
-  'Urquiza', 'Roca', 'Alem', 'Las Heras', 'Córdoba', 'Santa Fe', 'Mendoza',
+  'San Martín',
+  'Belgrano',
+  'Rivadavia',
+  'Sarmiento',
+  'Mitre',
+  'Moreno',
+  'Colón',
+  '25 de Mayo',
+  '9 de Julio',
+  'España',
+  'Italia',
+  'Francia',
+  'Urquiza',
+  'Roca',
+  'Alem',
+  'Las Heras',
+  'Córdoba',
+  'Santa Fe',
+  'Mendoza',
 ];
 
 @Injectable()
@@ -54,16 +135,32 @@ export class SeedService {
     private readonly socioTemporadaRepository: Repository<SocioTemporada>,
     @InjectRepository(RegistroIngreso)
     private readonly registroIngresoRepository: Repository<RegistroIngreso>,
-  ) { }
+    @InjectRepository(CategoriaSocio)
+    private readonly categoriaSocioRepository: Repository<CategoriaSocio>,
+  ) {}
 
+  /**
+   * Ejecuta el seed de producción (solo categorías)
+   * Este método SIEMPRE se ejecuta, incluso en producción
+   */
   async run() {
-    this.logger.log('🚀 Iniciando seed completo...');
+    this.logger.log('🚀 Iniciando seed de producción...');
+    await this.createCategoriasSocio();
+    this.logger.log('✅ Seed de producción finalizado.');
+  }
+
+  /**
+   * Ejecuta el seed completo de desarrollo (usuarios, socios, etc.)
+   * SOLO ejecutar en entornos de desarrollo/prueba
+   */
+  async runDevSeed() {
+    this.logger.log('🚀 Iniciando seed de desarrollo...');
     await this.createAdminUser();
     await this.createTemporadas();
     await this.createSocios();
     await this.asociarSociosATemporadas();
     await this.createRegistrosIngreso();
-    this.logger.log('✅ Seed completo finalizado exitosamente.');
+    this.logger.log('✅ Seed de desarrollo finalizado.');
   }
 
   private getRandom<T>(arr: T[]): T {
@@ -80,7 +177,9 @@ export class SeedService {
 
   private generatePhone(): string {
     const prefixes = ['11', '221', '351', '341', '261'];
-    return this.getRandom(prefixes) + this.getRandomInt(1000000, 9999999).toString();
+    return (
+      this.getRandom(prefixes) + this.getRandomInt(1000000, 9999999).toString()
+    );
   }
 
   private generateBirthDate(): string {
@@ -103,7 +202,10 @@ export class SeedService {
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(adminPass, AUTH.BCRYPT_SALT_ROUNDS);
+    const hashedPassword = await bcrypt.hash(
+      adminPass,
+      AUTH.BCRYPT_SALT_ROUNDS,
+    );
 
     const newUser = this.usuarioRepository.create({
       usuario: adminUser,
@@ -111,7 +213,50 @@ export class SeedService {
     });
 
     await this.usuarioRepository.save(newUser);
-    this.logger.log('👤 Usuario admin creado (usuario: admin, contraseña: admin)');
+    this.logger.log(
+      '👤 Usuario admin creado (usuario: admin, contraseña: admin)',
+    );
+  }
+
+  private async createCategoriasSocio() {
+    const categoriasData = [
+      {
+        nombre: 'ACTIVO',
+        montoMensual: 10000,
+        activo: true,
+        exento: false,
+      },
+      {
+        nombre: 'ADHERENTE',
+        montoMensual: 5000,
+        activo: true,
+        exento: false,
+      },
+      {
+        nombre: 'VITALICIO',
+        montoMensual: 0,
+        activo: true,
+        exento: true,
+      },
+      {
+        nombre: 'HONORARIO',
+        montoMensual: 0,
+        activo: true,
+        exento: true,
+      },
+    ];
+
+    for (const categoria of categoriasData) {
+      const exists = await this.categoriaSocioRepository.findOne({
+        where: { nombre: categoria.nombre },
+      });
+      if (!exists) {
+        await this.categoriaSocioRepository.save(
+          this.categoriaSocioRepository.create(categoria),
+        );
+        this.logger.log(`📁 Categoría "${categoria.nombre}" creada.`);
+      }
+    }
   }
 
   private async createTemporadas() {
@@ -141,7 +286,9 @@ export class SeedService {
         where: { nombre: temp.nombre },
       });
       if (!exists) {
-        await this.temporadaRepository.save(this.temporadaRepository.create(temp));
+        await this.temporadaRepository.save(
+          this.temporadaRepository.create(temp),
+        );
         this.logger.log(`📅 Temporada "${temp.nombre}" creada.`);
       }
     }
@@ -177,7 +324,9 @@ export class SeedService {
         apellido,
         dni,
         telefono: this.generatePhone(),
-        email: `${nombre.toLowerCase()}.${apellido.toLowerCase()}${i}@email.com`.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+        email: `${nombre.toLowerCase()}.${apellido.toLowerCase()}${i}@email.com`
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, ''),
         fechaNacimiento: this.generateBirthDate(),
         direccion: `${this.getRandom(CALLES)} ${this.getRandomInt(100, 3000)}`,
         estado: i < 45 ? 'ACTIVO' : 'INACTIVO', // 90% activos
@@ -196,7 +345,9 @@ export class SeedService {
     });
 
     if (!temporadaActual) {
-      this.logger.warn('⚠️ No se encontró la temporada actual para asociar socios.');
+      this.logger.warn(
+        '⚠️ No se encontró la temporada actual para asociar socios.',
+      );
       return;
     }
 
@@ -229,7 +380,9 @@ export class SeedService {
     }
 
     if (asociados > 0) {
-      this.logger.log(`🏊 ${asociados} socios asociados a "${temporadaActual.nombre}" (Socios Pileta).`);
+      this.logger.log(
+        `🏊 ${asociados} socios asociados a "${temporadaActual.nombre}" (Socios Pileta).`,
+      );
     }
   }
 
@@ -304,7 +457,8 @@ export class SeedService {
         apellidoNoSocio: noSocio.apellido,
         tipoIngreso: TipoIngreso.NO_SOCIO,
         habilitaPileta: true,
-        metodoPago: i % 2 === 0 ? MetodoPago.EFECTIVO : MetodoPago.TRANSFERENCIA,
+        metodoPago:
+          i % 2 === 0 ? MetodoPago.EFECTIVO : MetodoPago.TRANSFERENCIA,
         importe: this.getRandomInt(3, 8) * 1000, // Entre $3000 y $8000
         fechaHoraIngreso: generarHoraHoy(),
       });
@@ -313,6 +467,8 @@ export class SeedService {
     await this.registroIngresoRepository.save(
       this.registroIngresoRepository.create(ingresos),
     );
-    this.logger.log(`📋 ${ingresos.length} registros de ingreso creados para hoy.`);
+    this.logger.log(
+      `📋 ${ingresos.length} registros de ingreso creados para hoy.`,
+    );
   }
 }
