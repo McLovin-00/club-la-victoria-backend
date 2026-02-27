@@ -4,8 +4,9 @@ import {
   IsDateString,
   IsEnum,
   IsBoolean,
+  IsNumber,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Estado, Genero } from './create-socio.dto';
 
 export class UpdateSocioDto {
@@ -54,4 +55,20 @@ export class UpdateSocioDto {
   })
   @IsOptional()
   foto?: Express.Multer.File;
+
+  @ApiPropertyOptional({
+    description: 'ID de la categoría del socio',
+    example: 1,
+  })
+  @IsNumber()
+  @IsOptional()
+  categoriaId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Fecha de alta del socio (formato ISO)',
+    example: '2024-01-15',
+  })
+  @IsDateString()
+  @IsOptional()
+  fechaAlta?: string;
 }

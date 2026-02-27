@@ -85,6 +85,15 @@ export class CreateSocioDto {
   genero!: Genero;
 
   @ApiProperty({
+    description: 'Fecha de alta del socio (formato ISO, opcional)',
+    example: '2024-01-15',
+    required: false,
+  })
+  @IsDateString()
+  @IsOptional()
+  fechaAlta?: string;
+
+  @ApiProperty({
     description: 'Foto del socio (archivo de imagen)',
     type: 'string',
     format: 'binary',
