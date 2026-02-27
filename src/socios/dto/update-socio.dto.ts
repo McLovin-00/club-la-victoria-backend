@@ -40,6 +40,13 @@ export class UpdateSocioDto {
   @IsEnum(Genero)
   genero!: Genero;
 
+  @ApiPropertyOptional({
+    description: 'Indica si el socio tiene manualmente una categoría (override)',
+    example: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  overrideManual?: boolean;
   @IsOptional()
   fotoUrl?: string;
 
