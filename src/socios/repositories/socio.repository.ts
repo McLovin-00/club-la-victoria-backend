@@ -16,6 +16,7 @@ export class SocioRepository extends Repository<Socio> {
     search?: string,
   ) {
     const query = this.createQueryBuilder('socio')
+      .leftJoinAndSelect('socio.categoria', 'categoria')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .skip((page - 1) * limit)

@@ -25,7 +25,7 @@ export class SociosService {
     private readonly asociacionesRepository: AsociacionesRepository,
     private readonly temporadaPiletaRepository: TemporadaPiletaRepository,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async create(createSocioDto: CreateSocioDto, file?: Express.Multer.File) {
     const queryRunner = this.dataSource.createQueryRunner();
@@ -114,7 +114,10 @@ export class SociosService {
     let oldFotoUrl: string | undefined;
 
     try {
-      const socio = await this.socioRepository.findOne({ where: { id } });
+      const socio = await this.socioRepository.findOne({
+        where: { id },
+        relations: ['categoria'],
+      });
       if (!socio) {
         throw new CustomError(
           ERROR_MESSAGES.SOCIO_NOT_FOUND,
@@ -141,8 +144,16 @@ export class SociosService {
 
       // Sacamos lo que no queremos pisar
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { fotoUrl, eliminarFotoVieja, ...rest } = dto;
+      const { fotoUrl, eliminarFotoVieja, categoriaId, ...rest } = dto;
       Object.assign(socio, rest);
+
+      // Mapear categoriaId a la relación categoria si overrideManual es true
+      if (dto.overrideManual && categoriaId) {
+        socio.categoria = { id: categoriaId } as any;
+      } else if (dto.overrideManual === false) {
+        // Si overrideManual es false, el job manejará la categoría
+        this.logger.debug('overrideManual es false, el job manejará la categoría');
+      }
 
       const updated = await this.socioRepository.save(socio);
 
@@ -210,7 +221,10 @@ export class SociosService {
   }
 
   async findOne(id: number) {
-    const socio = await this.socioRepository.findOne({ where: { id } });
+    const socio = await this.socioRepository.findOne({
+      where: { id },
+      relations: ['categoria'],
+    });
     if (!socio) {
       throw new CustomError(
         ERROR_MESSAGES.SOCIO_NOT_FOUND,
@@ -273,6 +287,7 @@ export class SociosService {
     });
 
     const socios = await qb
+      .leftJoinAndSelect('socio.categoria', 'categoria')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .limit(10)
@@ -293,11 +308,13 @@ export class SociosService {
     if (isNumeric && identifier.length <= 6) {
       socio = await this.socioRepository.findOne({
         where: { id: parseInt(identifier, 10) },
+        relations: ['categoria'],
       });
     } else {
       // Buscar por DNI
       socio = await this.socioRepository.findOne({
         where: { dni: identifier },
+        relations: ['categoria'],
       });
     }
 
@@ -336,7 +353,10 @@ export class SociosService {
   }
 
   async findOneByDniReserva(dni: string) {
-    const socio = await this.socioRepository.findOne({ where: { dni } });
+    const socio = await this.socioRepository.findOne({
+      where: { dni },
+      relations: ['categoria'],
+    });
     return !!socio;
   }
 }
