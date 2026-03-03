@@ -7,6 +7,8 @@ import { SocioRepository } from './repositories/socio.repository';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { AsociacionesRepository } from 'src/asociaciones/repositories/asociaciones.repository';
 import { TemporadaPiletaRepository } from 'src/temporadas/repositories/temporada.repository';
+import { CategoriasSocioModule } from 'src/categorias-socio/categorias-socio.module';
+import { CategoriaRulesService } from './services/categoria-rules.service';
 
 @Module({
   imports: [
@@ -15,6 +17,7 @@ import { TemporadaPiletaRepository } from 'src/temporadas/repositories/temporada
       AsociacionesRepository,
       TemporadaPiletaRepository,
     ]),
+    CategoriasSocioModule,
   ],
   controllers: [SociosController],
   providers: [
@@ -23,6 +26,7 @@ import { TemporadaPiletaRepository } from 'src/temporadas/repositories/temporada
     CloudinaryService,
     AsociacionesRepository,
     TemporadaPiletaRepository,
+    CategoriaRulesService,
   ],
 })
 export class SociosModule {}

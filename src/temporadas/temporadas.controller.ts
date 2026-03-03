@@ -86,8 +86,37 @@ export class TemporadasController {
   })
   @ApiResponse({ status: 404, description: 'Temporada no encontrada' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  findOne(@Param('id') id: string) {
+findOne(@Param('id') id: string) {
     return this.temporadasService.findOne(+id);
+  }
+
+  @Get(':id/tiene-registros-pileta')
+  @Private()
+  @ApiOperation({
+    summary: 'Verificar si la temporada tiene registros de pileta',
+    description:
+      'Verifica si una temporada tiene registros de ingreso de pileta asociados basándose en las fechas de la temporada',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID de la temporada',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Información sobre registros de pileta',
+    schema: {
+      type: 'object',
+      properties: {
+        tieneRegistros: { type: 'boolean' },
+        cantidad: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Temporada no encontrada' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  tieneRegistrosPileta(@Param('id', ParseIntPipe) id: number) {
+    return this.temporadasService.tieneRegistrosPileta(id);
   }
 
   @Patch(':id')

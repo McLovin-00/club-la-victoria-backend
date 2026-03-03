@@ -3,6 +3,8 @@ import { TemporadaPiletaRepository } from './repositories/temporada.repository';
 import { CreateTemporadaDto } from './dto/create-temporada.dto';
 import { SocioRepository } from 'src/socios/repositories/socio.repository';
 import { AsociacionesRepository } from 'src/asociaciones/repositories/asociaciones.repository';
+import { RegistroIngresoRepository } from 'src/registro-ingreso/repositories/registro-ingreso.repository';
+import { TipoIngreso } from 'src/registro-ingreso/entities/registro-ingreso.entity';
 import { CustomError } from 'src/constants/errors/custom-error';
 import { PAGINATION } from 'src/constants/pagination.constants';
 import {
@@ -18,6 +20,7 @@ export class TemporadasService {
     private readonly temporadaRepository: TemporadaPiletaRepository,
     private readonly socioRepository: SocioRepository,
     private readonly asociacionesRepository: AsociacionesRepository,
+    private readonly registroIngresoRepository: RegistroIngresoRepository,
   ) {}
 
   private async validarFechasNoSolapadas(
@@ -91,6 +94,34 @@ export class TemporadasService {
       .andWhere('temporada.fechaFin >= :hoy')
       .setParameters({ hoy })
       .getOne();
+  }
+
+  /**
+   * Verifica si una temporada tiene registros de ingreso de pileta asociados
+   * Un registro está asociado a una temporada si su fecha de ingreso está dentro del rango de la temporada
+   */
+  async tieneRegistrosPileta(id: number): Promise<{ tieneRegistros: boolean; cantidad: number }> {
+    const temporada = await this.temporadaRepository.findOne({ where: { id } });
+    
+    if (!temporada) {
+      throw new CustomError(
+        ERROR_MESSAGES.TEMPORADA_NOT_FOUND,
+        404,
+        ERROR_CODES.TEMPORADA_NOT_FOUND,
+      );
+    }
+
+    const cantidad = await this.registroIngresoRepository
+      .createQueryBuilder('registro')
+      .where('registro.tipoIngreso = :tipoIngreso', { tipoIngreso: TipoIngreso.SOCIO_PILETA })
+      .andWhere('registro.fechaHoraIngreso >= :fechaInicio', { fechaInicio: temporada.fechaInicio })
+      .andWhere('registro.fechaHoraIngreso <= :fechaFin', { fechaFin: `${temporada.fechaFin} 23:59:59` })
+      .getCount();
+
+    return {
+      tieneRegistros: cantidad > 0,
+      cantidad,
+    };
   }
 
   async getSocios(id: number) {
@@ -179,7 +210,7 @@ export class TemporadasService {
     if (search && search.trim()) {
       queryBuilder.andWhere(
         '(LOWER(socio.nombre) LIKE LOWER(:search) OR LOWER(socio.apellido) LIKE LOWER(:search) OR socio.dni LIKE :search OR LOWER(socio.email) LIKE LOWER(:search))',
-        { search: `%${search.trim()}%` },
+        { search: `%${search.trim()}%}` },
       );
     }
 

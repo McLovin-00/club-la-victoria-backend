@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { Usuario } from '../auth/entities/usuario.entity';
 import { Socio } from '../socios/entities/socio.entity';
 import { TemporadaPileta } from '../temporadas/entities/temporada.entity';
@@ -11,6 +11,12 @@ import {
   MetodoPago,
 } from '../registro-ingreso/entities/registro-ingreso.entity';
 import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.entity';
+import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
+import { Cuota, EstadoCuota } from '../cobros/entities/cuota.entity';
+import {
+  MetodoPago as MetodoPagoCuota,
+  PagoCuota,
+} from '../cobros/entities/pago-cuota.entity';
 import * as bcrypt from 'bcrypt';
 import { AUTH } from '../constants/auth.constants';
 
@@ -120,6 +126,214 @@ const CALLES = [
   'Mendoza',
 ];
 
+// Estructura para definir una familia
+interface EstructuraFamiliar {
+  padre: { nombre: string; genero: 'MASCULINO' };
+  madre: { nombre: string; genero: 'FEMENINO' };
+  hijos: { nombre: string; genero: 'MASCULINO' | 'FEMENINO' }[];
+}
+
+// Familias predefinidas con estructuras realistas
+const FAMILIAS_PREDEFINIDAS: EstructuraFamiliar[] = [
+  {
+    padre: { nombre: 'Roberto', genero: 'MASCULINO' },
+    madre: { nombre: 'María', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Juan', genero: 'MASCULINO' },
+      { nombre: 'Lucía', genero: 'FEMENINO' },
+      { nombre: 'Pedro', genero: 'MASCULINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Carlos', genero: 'MASCULINO' },
+    madre: { nombre: 'Ana', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Florencia', genero: 'FEMENINO' },
+      { nombre: 'Diego', genero: 'MASCULINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Miguel', genero: 'MASCULINO' },
+    madre: { nombre: 'Laura', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Camila', genero: 'FEMENINO' },
+      { nombre: 'Santiago', genero: 'MASCULINO' },
+      { nombre: 'Valentina', genero: 'FEMENINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'José', genero: 'MASCULINO' },
+    madre: { nombre: 'Cecilia', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Martín', genero: 'MASCULINO' },
+      { nombre: 'Sofía', genero: 'FEMENINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Fernando', genero: 'MASCULINO' },
+    madre: { nombre: 'Gabriela', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Nicolás', genero: 'MASCULINO' },
+      { nombre: 'Agustina', genero: 'FEMENINO' },
+      { nombre: 'Tomás', genero: 'MASCULINO' },
+      { nombre: 'Martina', genero: 'FEMENINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Ricardo', genero: 'MASCULINO' },
+    madre: { nombre: 'Andrea', genero: 'FEMENINO' },
+    hijos: [{ nombre: 'Lucas', genero: 'MASCULINO' }],
+  },
+  {
+    padre: { nombre: 'Luis', genero: 'MASCULINO' },
+    madre: { nombre: 'Paula', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Gonzalo', genero: 'MASCULINO' },
+      { nombre: 'Rocío', genero: 'FEMENINO' },
+      { nombre: 'Ezequiel', genero: 'MASCULINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Pedro', genero: 'MASCULINO' },
+    madre: { nombre: 'Romina', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Sebastián', genero: 'MASCULINO' },
+      { nombre: 'Carolina', genero: 'FEMENINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Alejandro', genero: 'MASCULINO' },
+    madre: { nombre: 'Daniela', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Facundo', genero: 'MASCULINO' },
+      { nombre: 'Julieta', genero: 'FEMENINO' },
+      { nombre: 'Agustín', genero: 'MASCULINO' },
+    ],
+  },
+  {
+    padre: { nombre: 'Pablo', genero: 'MASCULINO' },
+    madre: { nombre: 'Eugenia', genero: 'FEMENINO' },
+    hijos: [
+      { nombre: 'Matías', genero: 'MASCULINO' },
+      { nombre: 'Milagros', genero: 'FEMENINO' },
+    ],
+  },
+];
+
+const PERIODOS_2025 = Array.from(
+  { length: 12 },
+  (_, index) => `2025-${String(index + 1).padStart(2, '0')}`,
+);
+
+const NUMEROS_TARJETA_CENTRO_SEED = [
+  '5047812020402030',
+  '5047812020402030',
+  '5047812020402030',
+  '5047812020402030',
+  '5047812020408037',
+  '5047812020450021',
+  '5047812020450021',
+  '5047812020450021',
+  '5047812020450021',
+  '5047812020454122',
+  '5047812020454122',
+  '5047812020464121',
+  '5047812020552123',
+  '5047812020552123',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020558021',
+  '5047812020633030',
+  '5047812020633030',
+  '5047812020695021',
+  '5047812020695021',
+  '5047812020695021',
+  '5047812020742021',
+  '5047812020742021',
+  '5047812020742021',
+  '5047812020769024',
+  '5047812020805026',
+  '5047812020815030',
+  '5047812020817021',
+  '5047812020817021',
+  '5047812020817021',
+  '5047812020819027',
+  '5047812020825024',
+  '5047812020833028',
+  '5047812020833028',
+  '5047812021127024',
+  '5047812021127024',
+  '5047812021127024',
+  '5047812021127024',
+  '5047812021159027',
+  '5047812021159027',
+  '5047812021159027',
+  '5047812021159027',
+  '5047812021187036',
+  '5047812021187036',
+  '5047812021210028',
+  '5047812021288024',
+  '5047812021288024',
+  '5047812021288024',
+  '5047812021305125',
+  '5047812021305125',
+  '5047812021305125',
+  '5047812021305125',
+  '5047812021305125',
+  '5047812021562022',
+  '5047812021562022',
+  '5047812021562022',
+  '5047812021706025',
+  '5047812022283115',
+  '5047812022283115',
+  '5047812022519013',
+  '5047812022519013',
+  '5047812022519013',
+  '5047812022524013',
+  '5047812022524013',
+  '5047812023692017',
+  '5047812023715016',
+  '5047812023715016',
+  '5047812023900014',
+  '5047812023900022',
+  '5047812023932116',
+  '5047812023932116',
+  '5047812023932116',
+  '5047812023932116',
+  '5047812023932116',
+  '5047812023932116',
+  '5047812023934112',
+  '5047812024218010',
+  '5047812024218010',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812024424022',
+  '5047812025195019',
+  '5047812025195019',
+  '5047812025195019',
+  '5047812026391112',
+  '5047812026391112',
+  '5047812026391112',
+  '5047812026552010',
+  '5047812026552010',
+  '5047812026552010',
+  '5047812026552010',
+  '5047812026922106',
+  '5047812026922106',
+] as const;
+
+type PerfilPagoSeed = 'AL_DIA' | 'DEUDA_PARCIAL' | 'MOROSO';
+
 @Injectable()
 export class SeedService {
   private readonly logger = new Logger(SeedService.name);
@@ -137,6 +351,12 @@ export class SeedService {
     private readonly registroIngresoRepository: Repository<RegistroIngreso>,
     @InjectRepository(CategoriaSocio)
     private readonly categoriaSocioRepository: Repository<CategoriaSocio>,
+    @InjectRepository(GrupoFamiliar)
+    private readonly grupoFamiliarRepository: Repository<GrupoFamiliar>,
+    @InjectRepository(Cuota)
+    private readonly cuotaRepository: Repository<Cuota>,
+    @InjectRepository(PagoCuota)
+    private readonly pagoCuotaRepository: Repository<PagoCuota>,
   ) {}
 
   /**
@@ -157,8 +377,14 @@ export class SeedService {
     this.logger.log('🚀 Iniciando seed de desarrollo...');
     await this.createAdminUser();
     await this.createTemporadas();
-    await this.createSocios();
+    const seCrearonSocios = await this.createGruposFamiliares();
+
+    if (!seCrearonSocios) {
+      await this.createSociosNuevosConTarjetaCentro();
+    }
+
     await this.asociarSociosATemporadas();
+    await this.createCuotasSocios2025();
     await this.createRegistrosIngreso();
     this.logger.log('✅ Seed de desarrollo finalizado.');
   }
@@ -182,11 +408,22 @@ export class SeedService {
     );
   }
 
-  private generateBirthDate(): string {
-    const year = this.getRandomInt(1960, 2010);
+  private generateBirthDate(edadMinima: number, edadMaxima: number): string {
+    const year = new Date().getFullYear() - this.getRandomInt(edadMinima, edadMaxima);
     const month = this.getRandomInt(1, 12).toString().padStart(2, '0');
     const day = this.getRandomInt(1, 28).toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private generateEmail(nombre: string, apellido: string, sufijo: string): string {
+    return `${nombre.toLowerCase()}.${apellido.toLowerCase()}${sufijo}@email.com`
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private generateNumeroTarjetaCentro(secuencia: number): string {
+    const indiceNormalizado = secuencia % NUMEROS_TARJETA_CENTRO_SEED.length;
+    return NUMEROS_TARJETA_CENTRO_SEED[indiceNormalizado];
   }
 
   private async createAdminUser() {
@@ -223,25 +460,21 @@ export class SeedService {
       {
         nombre: 'ACTIVO',
         montoMensual: 10000,
-        activo: true,
         exento: false,
       },
       {
         nombre: 'ADHERENTE',
         montoMensual: 5000,
-        activo: true,
         exento: false,
       },
       {
         nombre: 'VITALICIO',
         montoMensual: 0,
-        activo: true,
         exento: true,
       },
       {
         nombre: 'HONORARIO',
         montoMensual: 0,
-        activo: true,
         exento: true,
       },
     ];
@@ -294,49 +527,299 @@ export class SeedService {
     }
   }
 
-  private async createSocios() {
+  /**
+   * Crea grupos familiares con múltiples miembros
+   * Cada familia tiene un grupo familiar asociado con el apellido
+   */
+  private async createGruposFamiliares(): Promise<boolean> {
     const sociosCount = await this.socioRepository.count();
     if (sociosCount > 0) {
       this.logger.log('👥 Ya existen socios. Omitiendo creación masiva.');
-      return;
+      return false;
     }
 
-    const socios = [];
-    const dniUsados = new Set<string>();
+    // Obtener categorías para asignar a los socios
+    const categorias = await this.categoriaSocioRepository.find();
+    const categoriaActivo = categorias.find((c) => c.nombre === 'ACTIVO');
+    const categoriaAdherente = categorias.find((c) => c.nombre === 'ADHERENTE');
+    const categoriaVitalicio = categorias.find((c) => c.nombre === 'VITALICIO');
+    const categoriaHonorario = categorias.find((c) => c.nombre === 'HONORARIO');
 
-    // Crear 50 socios con datos realistas
-    for (let i = 0; i < 50; i++) {
+    const dniUsados = new Set<string>();
+    let totalSocios = 0;
+    let totalSociosConTarjetaCentro = 0;
+    let secuenciaTarjetaCentro = 0;
+
+    // Seleccionar apellidos únicos para cada familia
+    const apellidosSeleccionados = [...APELLIDOS].sort(() => Math.random() - 0.5).slice(0, FAMILIAS_PREDEFINIDAS.length);
+
+    for (let i = 0; i < FAMILIAS_PREDEFINIDAS.length; i++) {
+      const familia = FAMILIAS_PREDEFINIDAS[i];
+      const apellido = apellidosSeleccionados[i];
+      const direccionFam = `${this.getRandom(CALLES)} ${this.getRandomInt(100, 3000)}`;
+
+      // Crear el grupo familiar
+      const grupoFamiliar = this.grupoFamiliarRepository.create({
+        nombre: `Familia ${apellido}`,
+        descripcion: `Grupo familiar de la familia ${apellido}`,
+        orden: i + 1,
+      });
+      const grupoGuardado = await this.grupoFamiliarRepository.save(grupoFamiliar);
+      this.logger.log(`👨‍👩‍👧‍👦 Grupo familiar "${grupoFamiliar.nombre}" creado.`);
+
+      const sociosFamilia: Socio[] = [];
+
+      // Crear el padre (jefe de familia - mayormente ACTIVO, algunos VITALICIO u HONORARIO)
+      let dniPadre: string;
+      do {
+        dniPadre = this.generateDNI();
+      } while (dniUsados.has(dniPadre));
+      dniUsados.add(dniPadre);
+
+      // Asignar categoría al padre: 70% ACTIVO, 20% VITALICIO, 10% HONORARIO
+      const categoriaPadre = i < 7 ? categoriaActivo : i < 9 ? categoriaVitalicio : categoriaHonorario;
+      const padreTieneTarjetaCentro = i % 2 === 0;
+
+      const socioPadre = this.socioRepository.create({
+        nombre: familia.padre.nombre,
+        apellido,
+        dni: dniPadre,
+        telefono: this.generatePhone(),
+        email: this.generateEmail(familia.padre.nombre, apellido, `_padre_${i}`),
+        fechaNacimiento: this.generateBirthDate(35, 55),
+        direccion: direccionFam,
+        estado: 'ACTIVO',
+        genero: familia.padre.genero,
+        fechaAlta: new Date().toISOString().split('T')[0],
+        grupoFamiliar: grupoGuardado,
+        categoria: categoriaPadre,
+        tarjetaCentro: padreTieneTarjetaCentro,
+        numeroTarjetaCentro: padreTieneTarjetaCentro
+          ? this.generateNumeroTarjetaCentro(secuenciaTarjetaCentro++)
+          : undefined,
+      });
+      sociosFamilia.push(socioPadre);
+      if (padreTieneTarjetaCentro) {
+        totalSociosConTarjetaCentro++;
+      }
+
+      // Crear la madre (mayormente ACTIVO o ADHERENTE)
+      let dniMadre: string;
+      do {
+        dniMadre = this.generateDNI();
+      } while (dniUsados.has(dniMadre));
+      dniUsados.add(dniMadre);
+
+      // Asignar categoría a la madre: 60% ACTIVO, 40% ADHERENTE
+      const categoriaMadre = i < 6 ? categoriaActivo : categoriaAdherente;
+      const madreTieneTarjetaCentro = i % 3 === 0;
+
+      const socioMadre = this.socioRepository.create({
+        nombre: familia.madre.nombre,
+        apellido,
+        dni: dniMadre,
+        telefono: this.generatePhone(),
+        email: this.generateEmail(familia.madre.nombre, apellido, `_madre_${i}`),
+        fechaNacimiento: this.generateBirthDate(30, 50),
+        direccion: direccionFam,
+        estado: 'ACTIVO',
+        genero: familia.madre.genero,
+        fechaAlta: new Date().toISOString().split('T')[0],
+        grupoFamiliar: grupoGuardado,
+        categoria: categoriaMadre,
+        tarjetaCentro: madreTieneTarjetaCentro,
+        numeroTarjetaCentro: madreTieneTarjetaCentro
+          ? this.generateNumeroTarjetaCentro(secuenciaTarjetaCentro++)
+          : undefined,
+      });
+      sociosFamilia.push(socioMadre);
+      if (madreTieneTarjetaCentro) {
+        totalSociosConTarjetaCentro++;
+      }
+
+      // Crear los hijos (todos ADHERENTE - dependientes de los padres)
+      for (let j = 0; j < familia.hijos.length; j++) {
+        const hijo = familia.hijos[j];
+        const hijoTieneTarjetaCentro = (i + j) % 4 === 0;
+        let dniHijo: string;
+        do {
+          dniHijo = this.generateDNI();
+        } while (dniUsados.has(dniHijo));
+        dniUsados.add(dniHijo);
+
+        const socioHijo = this.socioRepository.create({
+          nombre: hijo.nombre,
+          apellido,
+          dni: dniHijo,
+          telefono: this.getRandomInt(18, 25) > 20 ? this.generatePhone() : undefined, // Algunos hijos no tienen teléfono
+          email: this.generateEmail(hijo.nombre, apellido, `_hijo${j}_${i}`),
+          fechaNacimiento: this.generateBirthDate(5, 25),
+          direccion: direccionFam,
+          estado: 'ACTIVO',
+          genero: hijo.genero,
+          fechaAlta: new Date().toISOString().split('T')[0],
+          grupoFamiliar: grupoGuardado,
+          categoria: categoriaAdherente, // Los hijos siempre son ADHERENTE
+          tarjetaCentro: hijoTieneTarjetaCentro,
+          numeroTarjetaCentro: hijoTieneTarjetaCentro
+            ? this.generateNumeroTarjetaCentro(secuenciaTarjetaCentro++)
+            : undefined,
+        });
+        sociosFamilia.push(socioHijo);
+        if (hijoTieneTarjetaCentro) {
+          totalSociosConTarjetaCentro++;
+        }
+      }
+
+      // Guardar todos los socios de la familia
+      await this.socioRepository.save(sociosFamilia);
+      totalSocios += sociosFamilia.length;
+      this.logger.log(`   └─ ${sociosFamilia.length} miembros agregados a la familia ${apellido}`);
+    }
+
+    // Crear algunos socios individuales (sin grupo familiar) para variedad
+    const sociosIndividuales = 10;
+    for (let i = 0; i < sociosIndividuales; i++) {
       const esMasculino = i % 2 === 0;
       const nombre = esMasculino
         ? this.getRandom(NOMBRES_MASCULINOS)
         : this.getRandom(NOMBRES_FEMENINOS);
-      const apellido = this.getRandom(APELLIDOS);
+      const apellido = APELLIDOS[FAMILIAS_PREDEFINIDAS.length + i];
 
-      // Generar DNI único
       let dni: string;
       do {
         dni = this.generateDNI();
       } while (dniUsados.has(dni));
       dniUsados.add(dni);
 
-      socios.push({
+      // Asignar categoría variada a socios individuales
+      const categoriasIndividuales = [categoriaActivo, categoriaActivo, categoriaActivo, categoriaAdherente, categoriaAdherente, categoriaVitalicio, categoriaHonorario, categoriaActivo, categoriaActivo, categoriaAdherente];
+      const categoriaIndividual = categoriasIndividuales[i];
+      const tieneTarjetaCentro = i % 3 === 0 || i === sociosIndividuales - 1;
+
+      const socio = this.socioRepository.create({
         nombre,
         apellido,
         dni,
         telefono: this.generatePhone(),
-        email: `${nombre.toLowerCase()}.${apellido.toLowerCase()}${i}@email.com`
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, ''),
-        fechaNacimiento: this.generateBirthDate(),
+        email: this.generateEmail(nombre, apellido, `_ind${i}`),
+        fechaNacimiento: this.generateBirthDate(25, 60),
         direccion: `${this.getRandom(CALLES)} ${this.getRandomInt(100, 3000)}`,
-        estado: i < 45 ? 'ACTIVO' : 'INACTIVO', // 90% activos
+        estado: i < 8 ? 'ACTIVO' : 'INACTIVO',
         genero: esMasculino ? 'MASCULINO' : 'FEMENINO',
         fechaAlta: new Date().toISOString().split('T')[0],
+        categoria: categoriaIndividual,
+        tarjetaCentro: tieneTarjetaCentro,
+        numeroTarjetaCentro: tieneTarjetaCentro
+          ? this.generateNumeroTarjetaCentro(secuenciaTarjetaCentro++)
+          : undefined,
       });
+      await this.socioRepository.save(socio);
+      totalSocios++;
+      if (tieneTarjetaCentro) {
+        totalSociosConTarjetaCentro++;
+      }
     }
 
-    await this.socioRepository.save(this.socioRepository.create(socios));
-    this.logger.log(`👥 ${socios.length} socios creados con datos realistas.`);
+    this.logger.log(`👥 ${totalSocios} socios creados (${FAMILIAS_PREDEFINIDAS.length} familias con grupos familiares + ${sociosIndividuales} individuales).`);
+    this.logger.log(`💳 ${totalSociosConTarjetaCentro} socios creados con tarjeta del centro.`);
+    return true;
+  }
+
+  private async createSociosNuevosConTarjetaCentro() {
+    const sociosSeedConTarjeta = await this.socioRepository.find({
+      where: { email: Like('tarjeta.centro+%@seed.dev') },
+      order: { id: 'ASC' },
+    });
+
+    if (sociosSeedConTarjeta.length >= NUMEROS_TARJETA_CENTRO_SEED.length) {
+      this.logger.log(
+        `💳 Ya existen ${sociosSeedConTarjeta.length} socios nuevos seed con tarjeta del centro. Omitiendo creación.`,
+      );
+      return;
+    }
+
+    const categorias = await this.categoriaSocioRepository.find();
+    const categoriaActivo = categorias.find((c) => c.nombre === 'ACTIVO') ?? categorias[0];
+
+    if (!categoriaActivo) {
+      this.logger.warn(
+        '⚠️ No se encontró categoría para crear socios nuevos con tarjeta del centro.',
+      );
+      return;
+    }
+
+    const sociosExistentes = await this.socioRepository.find();
+    const dniUsados = new Set<string>(
+      sociosExistentes
+        .map((socio) => socio.dni)
+        .filter(
+          (dni): dni is string =>
+            typeof dni === 'string' && dni.trim().length > 0,
+        ),
+    );
+
+    const emailsSeedExistentes = new Set<string>(
+      sociosSeedConTarjeta
+        .map((socio) => socio.email)
+        .filter(
+          (email): email is string =>
+            typeof email === 'string' && email.trim().length > 0,
+        ),
+    );
+
+    const nuevosSociosConTarjeta: Socio[] = [];
+
+    for (let index = 0; index < NUMEROS_TARJETA_CENTRO_SEED.length; index++) {
+      const email = `tarjeta.centro+${String(index + 1).padStart(3, '0')}@seed.dev`;
+
+      if (emailsSeedExistentes.has(email)) {
+        continue;
+      }
+
+      let dni: string;
+      do {
+        dni = this.generateDNI();
+      } while (dniUsados.has(dni));
+      dniUsados.add(dni);
+
+      const esMasculino = index % 2 === 0;
+      const nombre = esMasculino
+        ? NOMBRES_MASCULINOS[index % NOMBRES_MASCULINOS.length]
+        : NOMBRES_FEMENINOS[index % NOMBRES_FEMENINOS.length];
+      const apellido = `${APELLIDOS[index % APELLIDOS.length]} TC${Math.floor(index / APELLIDOS.length) + 1}`;
+
+      const nuevoSocio = this.socioRepository.create({
+        nombre,
+        apellido,
+        dni,
+        telefono: this.generatePhone(),
+        email,
+        fechaNacimiento: this.generateBirthDate(18, 65),
+        direccion: `${this.getRandom(CALLES)} ${this.getRandomInt(100, 3000)}`,
+        estado: 'ACTIVO',
+        genero: esMasculino ? 'MASCULINO' : 'FEMENINO',
+        fechaAlta: new Date().toISOString().split('T')[0],
+        categoria: categoriaActivo,
+        tarjetaCentro: true,
+        numeroTarjetaCentro: this.generateNumeroTarjetaCentro(index),
+      });
+
+      nuevosSociosConTarjeta.push(nuevoSocio);
+    }
+
+    if (nuevosSociosConTarjeta.length === 0) {
+      this.logger.log(
+        '💳 No hay nuevos socios pendientes para crear con tarjeta del centro.',
+      );
+      return;
+    }
+
+    await this.socioRepository.save(nuevosSociosConTarjeta);
+
+    this.logger.log(
+      `💳 Socios nuevos con tarjeta del centro creados en seed de desarrollo: ${nuevosSociosConTarjeta.length}.`,
+    );
   }
 
   private async asociarSociosATemporadas() {
@@ -384,6 +867,187 @@ export class SeedService {
         `🏊 ${asociados} socios asociados a "${temporadaActual.nombre}" (Socios Pileta).`,
       );
     }
+  }
+
+  private getPerfilPagoSeed(index: number): PerfilPagoSeed {
+    const bucket = index % 10;
+
+    if (bucket < 4) {
+      return 'AL_DIA';
+    }
+
+    if (bucket < 8) {
+      return 'DEUDA_PARCIAL';
+    }
+
+    return 'MOROSO';
+  }
+
+  private getCantidadCuotasPendientes(
+    perfil: PerfilPagoSeed,
+    socioIndex: number,
+  ): number {
+    if (perfil === 'AL_DIA') {
+      return 0;
+    }
+
+    if (perfil === 'DEUDA_PARCIAL') {
+      return (socioIndex % 3) + 1;
+    }
+
+    return 4 + (socioIndex % 5);
+  }
+
+  private buildFechaPago(periodo: string, socioIndex: number): Date {
+    const [anio, mes] = periodo.split('-').map(Number);
+    const dia = Math.min(28, 5 + (socioIndex % 20));
+
+    return new Date(anio, mes - 1, dia, 10, 0, 0, 0);
+  }
+
+  private buildFechaEmision(periodo: string): Date {
+    const [anio, mes] = periodo.split('-').map(Number);
+
+    return new Date(anio, mes - 1, 1, 8, 0, 0, 0);
+  }
+
+  private async createCuotasSocios2025() {
+    const sociosElegibles = await this.socioRepository.find({
+      where: { estado: 'ACTIVO' },
+      relations: ['categoria'],
+      order: { id: 'ASC' },
+    });
+
+    const sociosConCategoriaNoExenta = sociosElegibles.filter(
+      (socio) => socio.categoria && !socio.categoria.exento,
+    );
+
+    if (sociosConCategoriaNoExenta.length === 0) {
+      this.logger.warn(
+        '⚠️ No hay socios activos con categoría no exenta para generar cuotas 2025.',
+      );
+      return;
+    }
+
+    const cuotasExistentes2025 = await this.cuotaRepository.find({
+      where: { periodo: Like('2025-%') },
+      select: ['id', 'socioId', 'periodo', 'estado'],
+    });
+
+    const cuotasExistentesPorClave = new Set(
+      cuotasExistentes2025.map((cuota) => `${cuota.socioId}-${cuota.periodo}`),
+    );
+
+    const cuotasNuevas: Cuota[] = [];
+    const sociosMorososIds: number[] = [];
+    let sociosAlDia = 0;
+    let sociosConDeudaParcial = 0;
+    let sociosMorosos = 0;
+    let cuotasPagadas = 0;
+    let cuotasPendientes = 0;
+
+    for (const [index, socio] of sociosConCategoriaNoExenta.entries()) {
+      const perfil = this.getPerfilPagoSeed(index);
+      const cuotasPendientesSocio = this.getCantidadCuotasPendientes(perfil, index);
+      const cuotasPagadasSocio = PERIODOS_2025.length - cuotasPendientesSocio;
+
+      if (perfil === 'AL_DIA') {
+        sociosAlDia++;
+      } else if (perfil === 'DEUDA_PARCIAL') {
+        sociosConDeudaParcial++;
+      } else {
+        sociosMorosos++;
+        sociosMorososIds.push(socio.id);
+      }
+
+      for (const [periodoIndex, periodo] of PERIODOS_2025.entries()) {
+        const claveCuota = `${socio.id}-${periodo}`;
+
+        if (cuotasExistentesPorClave.has(claveCuota)) {
+          continue;
+        }
+
+        const estaPagada = periodoIndex < cuotasPagadasSocio;
+        const fechaPago = estaPagada
+          ? this.buildFechaPago(periodo, index)
+          : undefined;
+        const [anio, mes] = periodo.split('-');
+
+        cuotasNuevas.push(
+          this.cuotaRepository.create({
+            socioId: socio.id,
+            periodo,
+            monto: Number(socio.categoria!.montoMensual),
+            estado: estaPagada ? EstadoCuota.PAGADA : EstadoCuota.PENDIENTE,
+            barcode: `${mes}-${anio}-${socio.id}`,
+            fechaPago,
+          }),
+        );
+
+        if (estaPagada) {
+          cuotasPagadas++;
+        } else {
+          cuotasPendientes++;
+        }
+      }
+    }
+
+    if (cuotasNuevas.length === 0) {
+      this.logger.log(
+        '💳 Las cuotas 2025 ya existen para los socios elegibles. Omitiendo creación.',
+      );
+      return;
+    }
+
+    const cuotasGuardadas = await this.cuotaRepository.save(cuotasNuevas);
+
+    const pagosNuevos: PagoCuota[] = [];
+    for (const [index, cuota] of cuotasGuardadas.entries()) {
+      if (cuota.estado !== EstadoCuota.PAGADA || !cuota.fechaPago) {
+        continue;
+      }
+
+      const metodoPago =
+        index % 4 === 0
+          ? MetodoPagoCuota.EFECTIVO
+          : index % 4 === 1
+            ? MetodoPagoCuota.TRANSFERENCIA
+            : index % 4 === 2
+              ? MetodoPagoCuota.TARJETA_DEBITO
+              : MetodoPagoCuota.TARJETA_CREDITO;
+
+      pagosNuevos.push(
+        this.pagoCuotaRepository.create({
+          cuotaId: cuota.id,
+          montoPagado: Number(cuota.monto),
+          metodoPago,
+          fechaPago: cuota.fechaPago,
+          fechaEmisionCuota: this.buildFechaEmision(cuota.periodo),
+          observaciones: 'Pago generado automáticamente por seed de desarrollo',
+        }),
+      );
+    }
+
+    if (pagosNuevos.length > 0) {
+      await this.pagoCuotaRepository.save(pagosNuevos);
+    }
+
+    if (sociosMorososIds.length > 0) {
+      await this.socioRepository.update(
+        { id: In(sociosMorososIds), estado: 'ACTIVO' },
+        { estado: 'MOROSO' },
+      );
+    }
+
+    this.logger.log(
+      `💳 Cuotas 2025 generadas: ${cuotasGuardadas.length} (${cuotasPagadas} pagadas / ${cuotasPendientes} pendientes).`,
+    );
+    this.logger.log(
+      `📊 Perfiles de pago 2025: ${sociosAlDia} al día, ${sociosConDeudaParcial} con deuda parcial y ${sociosMorosos} morosos.`,
+    );
+    this.logger.log(
+      `🧾 Pagos de cuotas creados automáticamente: ${pagosNuevos.length}.`,
+    );
   }
 
   private async createRegistrosIngreso() {

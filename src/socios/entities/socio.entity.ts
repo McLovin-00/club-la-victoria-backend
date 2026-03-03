@@ -11,7 +11,7 @@ import { SocioTemporada } from '../../asociaciones/entities/socio-temporada.enti
 import { RegistroIngreso } from '../../registro-ingreso/entities/registro-ingreso.entity';
 import { CategoriaSocio } from '../../categorias-socio/entities/categoria-socio.entity';
 import { Cuota } from '../../cobros/entities/cuota.entity';
-
+import { GrupoFamiliar } from '../../grupos-familiares/entities/grupo-familiar.entity';
 @Entity('socio')
 export class Socio {
   @PrimaryGeneratedColumn({ name: 'id_socio' })
@@ -43,11 +43,15 @@ export class Socio {
   @Column({ length: 255, nullable: true })
   direccion?: string;
 
-  @Column({ type: 'enum', enum: ['ACTIVO', 'INACTIVO'], default: 'ACTIVO' })
+  @Column({
+    type: 'enum',
+    enum: ['ACTIVO', 'INACTIVO', 'MOROSO'],
+    default: 'ACTIVO',
+  })
   @Index()
   estado!: string;
 
-@Column({ type: 'enum', enum: ['MASCULINO', 'FEMENINO'] })
+  @Column({ type: 'enum', enum: ['MASCULINO', 'FEMENINO'] })
   genero!: string;
 
   @Column({ type: 'boolean', default: false, name: 'override_manual' })
@@ -56,10 +60,20 @@ export class Socio {
   @Column({ length: 500, nullable: true, name: 'foto_url' })
   fotoUrl?: string;
 
+  @Column({ type: 'boolean', default: false, name: 'tarjeta_centro' })
+  tarjetaCentro!: boolean;
+
+  @Column({ length: 50, nullable: true, name: 'numero_tarjeta_centro' })
+  numeroTarjetaCentro?: string;
+
   @ManyToOne(() => CategoriaSocio, { nullable: true })
   @JoinColumn({ name: 'id_categoria' })
   categoria?: CategoriaSocio;
 
+  @ManyToOne(() => GrupoFamiliar, { nullable: true })
+  @JoinColumn({ name: 'id_grupo_familiar' })
+  @Index()
+  grupoFamiliar?: GrupoFamiliar;
   @OneToMany(() => SocioTemporada, (st) => st.socio)
   temporadas!: SocioTemporada[];
 

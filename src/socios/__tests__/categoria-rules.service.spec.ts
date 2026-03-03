@@ -19,7 +19,8 @@ describe('CategoriaRulesService', () => {
     overrideManual: false,
     temporadas: [],
     ingresos: [],
-    cuotas: [],
+  cuotas: [],
+  tarjetaCentro: false,
     ...overrides,
   });
 
@@ -32,22 +33,22 @@ describe('CategoriaRulesService', () => {
     jest.useRealTimers();
   });
 
-  it('asigna ADHERENTE cuando el socio es menor de 18', () => {
+  it('asigna ADHERENTE cuando el socio es menor de 13', () => {
     jest.setSystemTime(fechaActualReferencia);
 
     const socio = crearSocio({
-      fechaNacimiento: '2008-06-16',
+      fechaNacimiento: '2013-06-16',
       fechaAlta: '2025-01-01',
     });
 
     expect(service.calcularCategoria(socio)).toBe(CategoriaSocio.ADHERENTE);
   });
 
-  it('asigna ACTIVO cuando el socio es mayor de 18', () => {
+  it('asigna ACTIVO cuando el socio es mayor de 13', () => {
     jest.setSystemTime(fechaActualReferencia);
 
     const socio = crearSocio({
-      fechaNacimiento: '2000-03-10',
+      fechaNacimiento: '2013-06-14',
       fechaAlta: '2025-01-01',
     });
 
@@ -76,11 +77,11 @@ describe('CategoriaRulesService', () => {
     expect(service.calcularCategoria(socio)).toBe(CategoriaSocio.ACTIVO);
   });
 
-  it('asigna ACTIVO cuando cumple 18 hoy', () => {
+  it('asigna ACTIVO cuando cumple 13 hoy', () => {
     jest.setSystemTime(fechaActualReferencia);
 
     const socio = crearSocio({
-      fechaNacimiento: '2008-06-15',
+      fechaNacimiento: '2013-06-15',
       fechaAlta: '2025-01-01',
     });
 
@@ -91,7 +92,7 @@ describe('CategoriaRulesService', () => {
     jest.setSystemTime(new Date('2026-01-01T02:30:00.000Z'));
 
     const socio = crearSocio({
-      fechaNacimiento: '2008-01-01',
+      fechaNacimiento: '2013-01-02',
       fechaAlta: '2025-01-01',
     });
 

@@ -35,7 +35,8 @@ export class EstadisticasController {
     name: 'searchTerm',
     required: false,
     type: String,
-    description: 'Término de búsqueda para filtrar por nombre o apellido (búsqueda parcial, case-insensitive)',
+    description:
+      'Término de búsqueda para filtrar por nombre o apellido (búsqueda parcial, case-insensitive)',
     example: 'Perez',
   })
   @ApiResponse({

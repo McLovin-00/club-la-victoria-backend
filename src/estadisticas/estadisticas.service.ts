@@ -43,7 +43,7 @@ export class EstadisticasService {
         // Búsqueda simple con una sola palabra
         queryBuilder.andWhere(
           '(socio.id IS NOT NULL AND (socio.nombre ILIKE :term OR socio.apellido ILIKE :term)) OR ' +
-          '(socio.id IS NULL AND (registro.nombreNoSocio ILIKE :term OR registro.apellidoNoSocio ILIKE :term))',
+            '(socio.id IS NULL AND (registro.nombreNoSocio ILIKE :term OR registro.apellidoNoSocio ILIKE :term))',
           { term: `%${words[0]}%` },
         );
       } else {

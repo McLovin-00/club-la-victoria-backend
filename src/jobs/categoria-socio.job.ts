@@ -27,9 +27,8 @@ export class CategoriaSocioJob {
   async ejecutarActualizacionSemanalCategorias(): Promise<void> {
     const categoriaRepository = this.dataSource.getRepository(CategoriaSocio);
     const socioRepository = this.dataSource.getRepository(Socio);
-    const categoriasPorNombre = await this.obtenerCategoriasPorNombre(
-      categoriaRepository,
-    );
+    const categoriasPorNombre =
+      await this.obtenerCategoriasPorNombre(categoriaRepository);
 
     let offset = 0;
     let totalProcesados = 0;
@@ -53,9 +52,8 @@ export class CategoriaSocioJob {
       for (const socio of socios) {
         totalProcesados += 1;
 
-        const nombreCategoriaCalculada = this.categoriaRulesService.calcularCategoria(
-          socio,
-        );
+        const nombreCategoriaCalculada =
+          this.categoriaRulesService.calcularCategoria(socio);
         const nombreCategoriaActual = socio.categoria?.nombre ?? null;
 
         if (nombreCategoriaCalculada === nombreCategoriaActual) {
@@ -63,7 +61,9 @@ export class CategoriaSocioJob {
           continue;
         }
 
-        const categoriaDestino = categoriasPorNombre.get(nombreCategoriaCalculada);
+        const categoriaDestino = categoriasPorNombre.get(
+          nombreCategoriaCalculada,
+        );
         if (!categoriaDestino) {
           totalSaltadosSinCategoria += 1;
           this.logger.warn(
@@ -120,7 +120,9 @@ export class CategoriaSocioJob {
   private async obtenerCategoriasPorNombre(
     categoriaRepository: Repository<CategoriaSocio>,
   ): Promise<Map<CategoriaCalculada, CategoriaSocio>> {
-    const categorias = await categoriaRepository.find({ select: ['id', 'nombre'] });
+    const categorias = await categoriaRepository.find({
+      select: ['id', 'nombre'],
+    });
     const categoriasPorNombre = new Map<CategoriaCalculada, CategoriaSocio>();
 
     for (const categoria of categorias) {
@@ -133,6 +135,8 @@ export class CategoriaSocioJob {
   }
 
   private esCategoriaCalculada(nombre: string): nombre is CategoriaCalculada {
-    return Object.values(CategoriaCalculada).includes(nombre as CategoriaCalculada);
+    return Object.values(CategoriaCalculada).includes(
+      nombre as CategoriaCalculada,
+    );
   }
 }

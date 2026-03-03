@@ -6,6 +6,10 @@ import { Socio } from '../socios/entities/socio.entity';
 import { TemporadaPileta } from '../temporadas/entities/temporada.entity';
 import { SocioTemporada } from '../asociaciones/entities/socio-temporada.entity';
 import { RegistroIngreso } from '../registro-ingreso/entities/registro-ingreso.entity';
+import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.entity';
+import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
+import { PagoCuota } from '../cobros/entities/pago-cuota.entity';
+import { Cuota } from '../cobros/entities/cuota.entity';
 import { AppConfigModule } from '../config/AppConfig/app-config.module';
 import { AppConfigService } from '../config/AppConfig/app-config.service';
 
@@ -29,6 +33,10 @@ import { AppConfigService } from '../config/AppConfig/app-config.service';
           TemporadaPileta,
           SocioTemporada,
           RegistroIngreso,
+          GrupoFamiliar,
+          Cuota,
+          CategoriaSocio,
+          PagoCuota,
         ],
         synchronize: false,
       }),
@@ -39,6 +47,10 @@ import { AppConfigService } from '../config/AppConfig/app-config.service';
       TemporadaPileta,
       SocioTemporada,
       RegistroIngreso,
+      GrupoFamiliar,
+      Cuota,
+      CategoriaSocio,
+      PagoCuota,
     ]),
   ],
   providers: [SeedService],

@@ -21,13 +21,16 @@ enum VariablesEntorno {
   CLOUDINARY_API_KEY = 'CLOUDINARY_API_KEY',
   CLOUDINARY_API_SECRET = 'CLOUDINARY_API_SECRET',
   CORS_ORIGIN = 'CORS_ORIGIN',
+  TARJETA_CENTRO_PREFIX = 'TARJETA_CENTRO_PREFIX',
+  TARJETA_CENTRO_EMISOR = 'TARJETA_CENTRO_EMISOR',
+  TARJETA_CENTRO_NOMBRE = 'TARJETA_CENTRO_NOMBRE',
 }
 
 @Injectable()
 export class AppConfigService {
   private readonly logger = new Logger(AppConfigService.name);
 
-  constructor(private readonly configService: ConfigService) { }
+  constructor(private readonly configService: ConfigService) {}
 
   private getEnvironmentVariable<T>(key: string): T {
     try {
@@ -134,5 +137,26 @@ export class AppConfigService {
       return origins.split(',').map((origin) => origin.trim());
     }
     return origins;
+  }
+
+  getTarjetaCentroPrefix(): string {
+    return this.configService.get<string>(
+      VariablesEntorno.TARJETA_CENTRO_PREFIX,
+      'C0019094',
+    );
+  }
+
+  getTarjetaCentroEmisor(): string {
+    return this.configService.get<string>(
+      VariablesEntorno.TARJETA_CENTRO_EMISOR,
+      '431005001909',
+    );
+  }
+
+  getTarjetaCentroNombre(): string {
+    return this.configService.get<string>(
+      VariablesEntorno.TARJETA_CENTRO_NOMBRE,
+      'CLUB DE CAZADORES LA',
+    );
   }
 }

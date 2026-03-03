@@ -16,6 +16,10 @@ import { RegistroIngreso } from './registro-ingreso/entities/registro-ingreso.en
 import { CategoriaSocio } from './categorias-socio/entities/categoria-socio.entity';
 import { Cuota } from './cobros/entities/cuota.entity';
 import { PagoCuota } from './cobros/entities/pago-cuota.entity';
+import { Notificacion } from './notificaciones/entities/notificacion.entity';
+import { GrupoFamiliar } from './grupos-familiares/entities/grupo-familiar.entity';
+import { GruposFamiliaresModule } from './grupos-familiares/grupos-familiares.module';
+
 import { AppConfigModule } from './config/AppConfig/app-config.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { EstadisticasModule } from './estadisticas/estadisticas.module';
@@ -46,6 +50,7 @@ import { CategoriaRulesService } from './socios/services/categoria-rules.service
     HealthModule,
     CategoriasSocioModule,
     CobrosModule,
+    GruposFamiliaresModule,
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
@@ -66,7 +71,10 @@ import { CategoriaRulesService } from './socios/services/categoria-rules.service
           CategoriaSocio,
           Cuota,
           PagoCuota,
+          Notificacion,
+          GrupoFamiliar,
         ],
+
         synchronize: configService.getNodeEnv() === 'development',
       }),
     }),

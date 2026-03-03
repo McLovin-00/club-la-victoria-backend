@@ -5,7 +5,9 @@ import {
   IsEnum,
   IsBoolean,
   IsNumber,
+  IsInt,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Estado, Genero } from './create-socio.dto';
 
@@ -41,9 +43,28 @@ export class UpdateSocioDto {
   genero!: Genero;
 
   @ApiPropertyOptional({
-    description: 'Indica si el socio tiene manualmente una categoría (override)',
+    description:
+      'Indica si el socio tiene manualmente una categoría (override)',
     example: false,
   })
+  @Transform(
+    ({ value }) => {
+      // El interceptor BooleanTransformInterceptor ya convirtió el string a boolean
+      // Este Transform es una segunda capa de seguridad
+      if (value === true || value === 'true' || value === 1 || value === '1')
+        return true;
+      if (
+        value === false ||
+        value === 'false' ||
+        value === 0 ||
+        value === '0' ||
+        value === ''
+      )
+        return false;
+      return undefined;
+    },
+    { toClassOnly: true },
+  )
   @IsBoolean()
   @IsOptional()
   overrideManual?: boolean;
@@ -67,7 +88,12 @@ export class UpdateSocioDto {
     description: 'ID de la categoría del socio',
     example: 1,
   })
-  @IsNumber()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    const parsed = parseInt(value, 10);
+    return isNaN(parsed) ? undefined : parsed;
+  })
+  @IsInt()
   @IsOptional()
   categoriaId?: number;
 
@@ -78,4 +104,36 @@ export class UpdateSocioDto {
   @IsDateString()
   @IsOptional()
   fechaAlta?: string;
+
+  @ApiPropertyOptional({
+    description: 'Indica si el socio tiene tarjeta del centro',
+    example: false,
+  })
+  @Transform(
+    ({ value }) => {
+      if (value === true || value === 'true' || value === 1 || value === '1')
+        return true;
+      if (
+        value === false ||
+        value === 'false' ||
+        value === 0 ||
+        value === '0' ||
+        value === ''
+      )
+        return false;
+      return undefined;
+    },
+    { toClassOnly: true },
+  )
+  @IsBoolean()
+  @IsOptional()
+  tarjetaCentro?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Número de tarjeta del centro (solo si tarjetaCentro es true)',
+    example: 'TC-12345',
+  })
+  @IsString()
+  @IsOptional()
+  numeroTarjetaCentro?: string;
 }

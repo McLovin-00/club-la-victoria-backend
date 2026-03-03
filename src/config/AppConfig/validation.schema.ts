@@ -26,4 +26,9 @@ export const configValidationSchema = Joi.object({
 
   // CORS
   CORS_ORIGIN: Joi.string().required(),
+
+  // Tarjeta del Centro 23f
+  TARJETA_CENTRO_PREFIX: Joi.string().default('C0019094'),
+  TARJETA_CENTRO_EMISOR: Joi.string().length(12).default('431005001909'),
+  TARJETA_CENTRO_NOMBRE: Joi.string().max(30).default('CLUB DE CAZADORES LA'),
 });

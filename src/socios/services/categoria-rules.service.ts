@@ -24,9 +24,12 @@ export class CategoriaRulesService {
       return CategoriaSocio.VITALICIO;
     }
 
-    const edad = this.calcularAniosCumplidos(socio.fechaNacimiento, fechaActual);
+    const edad = this.calcularAniosCumplidos(
+      socio.fechaNacimiento,
+      fechaActual,
+    );
 
-    if (edad < 18) {
+    if (edad < 13) {
       return CategoriaSocio.ADHERENTE;
     }
 
@@ -37,14 +40,16 @@ export class CategoriaRulesService {
     return format(toZonedTime(new Date(), TIMEZONE), 'yyyy-MM-dd');
   }
 
-  private calcularAniosCumplidos(fechaInicio: string, fechaFin: string): number {
+  private calcularAniosCumplidos(
+    fechaInicio: string,
+    fechaFin: string,
+  ): number {
     const inicio = this.parsearFecha(fechaInicio, 'fechaInicio');
     const fin = this.parsearFecha(fechaFin, 'fechaFin');
 
     let anios = fin.anio - inicio.anio;
     const aunNoCumplio =
-      fin.mes < inicio.mes ||
-      (fin.mes === inicio.mes && fin.dia < inicio.dia);
+      fin.mes < inicio.mes || (fin.mes === inicio.mes && fin.dia < inicio.dia);
 
     if (aunNoCumplio) {
       anios -= 1;

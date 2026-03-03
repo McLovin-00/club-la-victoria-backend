@@ -28,6 +28,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { ImageValidationPipe } from 'src/common/pipes/image-validation.pipe';
+import { BooleanTransformInterceptor } from 'src/common/interceptors/boolean-transform.interceptor';
 
 @ApiTags('socios')
 @ApiBearerAuth('JWT-auth')
@@ -72,7 +73,7 @@ export class SociosController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor('foto'))
+  @UseInterceptors(FileInterceptor('foto'), BooleanTransformInterceptor)
   @Private()
   @ApiOperation({
     summary: 'Crear nuevo socio',
@@ -101,7 +102,7 @@ export class SociosController {
   }
 
   @Put(':id')
-  @UseInterceptors(FileInterceptor('foto'))
+  @UseInterceptors(FileInterceptor('foto'), BooleanTransformInterceptor)
   @Private()
   @ApiOperation({
     summary: 'Actualizar socio',

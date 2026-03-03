@@ -14,6 +14,8 @@ import {
   ERROR_MESSAGES,
   ERROR_CODES,
 } from 'src/constants/errors/error-messages';
+import { CategoriaRulesService } from './services/categoria-rules.service';
+import { CategoriasSocioService } from 'src/categorias-socio/categorias-socio.service';
 
 @Injectable()
 export class SociosService {
@@ -25,6 +27,8 @@ export class SociosService {
     private readonly asociacionesRepository: AsociacionesRepository,
     private readonly temporadaPiletaRepository: TemporadaPiletaRepository,
     private readonly dataSource: DataSource,
+    private readonly categoriaRulesService: CategoriaRulesService,
+    private readonly categoriasSocioService: CategoriasSocioService,
   ) {}
 
   async create(createSocioDto: CreateSocioDto, file?: Express.Multer.File) {
@@ -65,8 +69,45 @@ export class SociosService {
         fechaAlta,
       };
 
+      // Calcular categoría automáticamente si no hay override manual
+      let categoriaIdAuto = socioData.categoriaId;
+      this.logger.debug(
+        `Calculando categoría - overrideManual: ${socioData.overrideManual}, categoriaId inicial: ${categoriaIdAuto}`,
+      );
+      if (!socioData.overrideManual) {
+        this.logger.debug(
+          `fechaNacimiento: ${socioData.fechaNacimiento}, fechaAlta: ${fechaAlta}`,
+        );
+        const socioTemporal = {
+          fechaNacimiento: socioData.fechaNacimiento,
+          fechaAlta: fechaAlta,
+          categoria: null,
+        } as any;
+        const categoriaNombre =
+          this.categoriaRulesService.calcularCategoria(socioTemporal);
+        this.logger.debug(`Categoría calculada: ${categoriaNombre}`);
+        const categoria =
+          await this.categoriasSocioService.findByNombre(categoriaNombre);
+        this.logger.debug(
+          `Categoría encontrada en DB: ${JSON.stringify(categoria)}`,
+        );
+        if (categoria) {
+          categoriaIdAuto = categoria.id;
+          this.logger.debug(
+            `categoriaIdAuto actualizado a: ${categoriaIdAuto}`,
+          );
+        } else {
+          this.logger.warn(
+            `No se encontró la categoría ${categoriaNombre} en la base de datos`,
+          );
+        }
+      }
+
       // Crear socio en transacción
-      const socio = await this.socioRepository.createSocio(socioData);
+      const socio = await this.socioRepository.createSocio({
+        ...socioData,
+        categoriaId: categoriaIdAuto,
+      });
 
       await queryRunner.commitTransaction();
       return socio;
@@ -152,7 +193,9 @@ export class SociosService {
         socio.categoria = { id: categoriaId } as any;
       } else if (dto.overrideManual === false) {
         // Si overrideManual es false, el job manejará la categoría
-        this.logger.debug('overrideManual es false, el job manejará la categoría');
+        this.logger.debug(
+          'overrideManual es false, el job manejará la categoría',
+        );
       }
 
       const updated = await this.socioRepository.save(socio);

@@ -12,7 +12,9 @@ interface RegistroIngresoValidation {
 }
 
 @ValidatorConstraint({ name: 'isValidRegistroIngreso', async: false })
-export class IsValidRegistroIngresoConstraint implements ValidatorConstraintInterface {
+export class IsValidRegistroIngresoConstraint
+  implements ValidatorConstraintInterface
+{
   validate(_value: unknown, args: ValidationArguments) {
     const dto = args.object as RegistroIngresoValidation;
 

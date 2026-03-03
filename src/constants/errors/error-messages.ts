@@ -46,6 +46,35 @@ export const ERROR_MESSAGES = {
   CLOUDINARY_UPLOAD_ERROR: 'Error al subir la imagen',
   CLOUDINARY_DELETE_ERROR: 'Error al eliminar la imagen',
 
+  // Errores de categorías y cobros
+  CATEGORIA_NOT_FOUND: 'Categoría no encontrada',
+  CATEGORIA_NAME_EXISTS: 'Ya existe una categoría con ese nombre',
+  CATEGORIA_IN_USE:
+    'No se puede eliminar la categoría porque tiene socios asociados',
+  ERROR_CREATING_CATEGORIA: 'Error al crear la categoría',
+  ERROR_UPDATING_CATEGORIA: 'Error al actualizar la categoría',
+
+  // Errores de cobros
+  CUOTA_NOT_FOUND: 'Cuota no encontrada',
+  CUOTA_YA_PAGADA: 'La cuota ya está pagada',
+  CUOTA_YA_EXISTE: 'Ya existe una cuota para este socio en el período',
+  BARCODE_INVALID: 'Código de barras inválido',
+  ERROR_CREATING_CUOTA: 'Error al crear la cuota',
+  ERROR_REGISTRANDO_PAGO: 'Error al registrar el pago',
+  ERROR_GENERANDO_CUOTAS: 'Error al generar las cuotas',
+  NO_CUOTAS_PENDIENTES: 'No hay cuotas pendientes para el período',
+
+  // Errores de notificaciones
+  NOTIFICACION_NOT_FOUND: 'Notificación no encontrada',
+  ERROR_CREATING_NOTIFICACION: 'Error al crear la notificación',
+
+  // Errores de grupos familiares
+  GRUPO_FAMILIAR_NOT_FOUND: 'Grupo familiar no encontrado',
+  GRUPO_FAMILIAR_NAME_EXISTS: 'Ya existe un grupo familiar con ese nombre',
+  ERROR_CREATING_GRUPO_FAMILIAR: 'Error al crear el grupo familiar',
+  ERROR_UPDATING_GRUPO_FAMILIAR: 'Error al actualizar el grupo familiar',
+  ERROR_DELETING_GRUPO_FAMILIAR: 'Error al eliminar el grupo familiar',
+  SOCIO_IDS_INVALIDOS: 'Uno o más IDs de socio no son válidos',
   // Errores de base de datos
   DB_CONSTRAINT_ERROR: 'Error de restricción en la base de datos',
   DB_CONNECTION_ERROR: 'Error de conexión con la base de datos',
@@ -80,6 +109,32 @@ export const ERROR_CODES = {
   SOCIO_ALREADY_REGISTERED_TODAY: 'ERR_ALREADY_REGISTERED_TODAY',
   OVERLAPPING_SEASONS: 'ERR_OVERLAPPING_SEASONS',
   CANNOT_DELETE_SOCIO: 'ERR_CANNOT_DELETE_SOCIO',
+  // Categorías y cobros
+  CATEGORIA_NOT_FOUND: 'ERR_CATEGORIA_NOT_FOUND',
+  CATEGORIA_NAME_EXISTS: 'ERR_CATEGORIA_NAME_EXISTS',
+  CATEGORIA_IN_USE: 'ERR_CATEGORIA_IN_USE',
+  ERROR_CREATING_CATEGORIA: 'ERR_CREATING_CATEGORIA',
+  ERROR_UPDATING_CATEGORIA: 'ERR_UPDATING_CATEGORIA',
+
+  CUOTA_NOT_FOUND: 'ERR_CUOTA_NOT_FOUND',
+  CUOTA_YA_PAGADA: 'ERR_CUOTA_YA_PAGADA',
+  CUOTA_YA_EXISTE: 'ERR_CUOTA_YA_EXISTE',
+  BARCODE_INVALID: 'ERR_BARCODE_INVALID',
+  ERROR_CREATING_CUOTA: 'ERR_CREATING_CUOTA',
+  ERROR_REGISTRANDO_PAGO: 'ERR_REGISTRANDO_PAGO',
+  ERROR_GENERANDO_CUOTAS: 'ERR_GENERANDO_CUOTAS',
+  NO_CUOTAS_PENDIENTES: 'ERR_NO_CUOTAS_PENDIENTES',
+
+  NOTIFICACION_NOT_FOUND: 'ERR_NOTIFICACION_NOT_FOUND',
+  ERROR_CREATING_NOTIFICACION: 'ERR_CREATING_NOTIFICACION',
+
+  // Grupos familiares
+  GRUPO_FAMILIAR_NOT_FOUND: 'ERR_GRUPO_FAMILIAR_NOT_FOUND',
+  GRUPO_FAMILIAR_NAME_EXISTS: 'ERR_GRUPO_FAMILIAR_NAME_EXISTS',
+  ERROR_CREATING_GRUPO_FAMILIAR: 'ERR_CREATING_GRUPO_FAMILIAR',
+  ERROR_UPDATING_GRUPO_FAMILIAR: 'ERR_UPDATING_GRUPO_FAMILIAR',
+  ERROR_DELETING_GRUPO_FAMILIAR: 'ERR_DELETING_GRUPO_FAMILIAR',
+  SOCIO_IDS_INVALIDOS: 'ERR_SOCIO_IDS_INVALIDOS',
 
   // Base de datos
   DB_CONSTRAINT_ERROR: 'ERR_DB_CONSTRAINT',
