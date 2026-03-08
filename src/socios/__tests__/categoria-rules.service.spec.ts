@@ -19,8 +19,8 @@ describe('CategoriaRulesService', () => {
     overrideManual: false,
     temporadas: [],
     ingresos: [],
-  cuotas: [],
-  tarjetaCentro: false,
+    cuotas: [],
+    tarjetaCentro: false,
     ...overrides,
   });
 

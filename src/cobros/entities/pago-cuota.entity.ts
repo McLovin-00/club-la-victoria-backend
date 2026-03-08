@@ -8,14 +8,9 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { Cuota } from './cuota.entity';
-
-export enum MetodoPago {
-  EFECTIVO = 'EFECTIVO',
-  TRANSFERENCIA = 'TRANSFERENCIA',
-  TARJETA_DEBITO = 'TARJETA_DEBITO',
-  TARJETA_CREDITO = 'TARJETA_CREDITO',
-  OTRO = 'OTRO',
-}
+import { MetodoPago } from '../../metodos-pago/entities/metodo-pago.entity';
+import { CobroOperacion } from './cobro-operacion.entity';
+import { Cobrador } from '../../cobradores/entities/cobrador.entity';
 
 @Entity('pago_cuota')
 export class PagoCuota {
@@ -29,12 +24,28 @@ export class PagoCuota {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'monto_pagado' })
   montoPagado!: number;
 
-  @Column({
-    type: 'enum',
-    enum: MetodoPago,
-    name: 'metodo_pago',
+  @Column({ name: 'id_metodo_pago', nullable: true })
+  metodoPagoId?: number;
+
+  @Column({ name: 'id_cobro_operacion', nullable: true })
+  operacionCobroId?: number;
+
+  @ManyToOne(() => CobroOperacion, (operacion) => operacion.pagos, {
+    nullable: true,
   })
-  metodoPago!: MetodoPago;
+  @JoinColumn({ name: 'id_cobro_operacion' })
+  operacionCobro?: CobroOperacion;
+
+  @Column({ name: 'id_cobrador', nullable: true })
+  cobradorId?: number;
+
+  @ManyToOne(() => Cobrador, { nullable: true })
+  @JoinColumn({ name: 'id_cobrador' })
+  cobrador?: Cobrador;
+
+  @ManyToOne(() => MetodoPago, (metodo) => metodo.pagos, { nullable: true })
+  @JoinColumn({ name: 'id_metodo_pago' })
+  metodoPago?: MetodoPago;
 
   @Column({
     type: 'timestamp',

@@ -45,7 +45,7 @@ describe('TarjetaCentro23fService', () => {
     periodo: '2026-02',
     monto,
     estado: EstadoCuota.PENDIENTE,
-    barcode: `02-2026-${id}`,
+    rechazadaTarjetaCentro: false,
     createdAt: new Date('2026-02-01T00:00:00.000Z'),
     fechaPago: undefined,
     socio,
@@ -53,8 +53,16 @@ describe('TarjetaCentro23fService', () => {
   });
 
   it('deberia generar archivo con cabecera, detalles y trailer de 85 caracteres', () => {
-    const cuota1 = crearCuota(2844, 4500, crearSocio(1, '5047812020817021', true));
-    const cuota2 = crearCuota(1950, 6000, crearSocio(2, '5047812021305125', true));
+    const cuota1 = crearCuota(
+      2844,
+      4500,
+      crearSocio(1, '5047812020817021', true),
+    );
+    const cuota2 = crearCuota(
+      1950,
+      6000,
+      crearSocio(2, '5047812021305125', true),
+    );
 
     const archivo = service.generarArchivo('2026-02', [cuota1, cuota2]);
     const lineas = archivo.content.split('\n');
@@ -81,9 +89,21 @@ describe('TarjetaCentro23fService', () => {
   });
 
   it('deberia omitir cuotas de socios sin tarjeta del centro o sin numero de tarjeta', () => {
-    const cuotaConTarjeta = crearCuota(4001, 4500, crearSocio(1, '5047812020817021', true));
-    const cuotaSinNumero = crearCuota(4002, 4500, crearSocio(2, undefined, true));
-    const cuotaSinTarjetaCentro = crearCuota(4003, 4500, crearSocio(3, '5047812020817000', false));
+    const cuotaConTarjeta = crearCuota(
+      4001,
+      4500,
+      crearSocio(1, '5047812020817021', true),
+    );
+    const cuotaSinNumero = crearCuota(
+      4002,
+      4500,
+      crearSocio(2, undefined, true),
+    );
+    const cuotaSinTarjetaCentro = crearCuota(
+      4003,
+      4500,
+      crearSocio(3, '5047812020817000', false),
+    );
 
     const archivo = service.generarArchivo('2026-02', [
       cuotaConTarjeta,

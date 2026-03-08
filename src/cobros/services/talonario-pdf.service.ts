@@ -10,7 +10,6 @@ interface TalonarioData {
   socioDireccion: string;
   periodo: string;
   monto: number;
-  barcode: string;
   grupoNombre?: string;
   grupoOrden?: number;
 }
@@ -60,6 +59,29 @@ export class TalonarioPdfService {
     );
   }
 
+  async generarHtmlReciboMultiple(cuotas: Cuota[]): Promise<string> {
+    const template = this.getTemplateEmbebido();
+    const cuotasOrdenadas = [...cuotas].sort((a, b) =>
+      a.periodo.localeCompare(b.periodo),
+    );
+    const data = this.mapearCuotasATalonarioData(cuotasOrdenadas);
+    const filasPorPagina = 7;
+    const paginas: string[] = [];
+
+    for (let i = 0; i < data.length; i += filasPorPagina) {
+      const pagina = data.slice(i, i + filasPorPagina);
+      paginas.push(
+        this.generarPaginaHtml(pagina, Math.floor(i / filasPorPagina)),
+      );
+    }
+
+    const contenidoHtml = paginas.join('\n');
+    return template.replace(
+      '<!-- PÁGINAS GENERADAS DINÁMICAMENTE -->',
+      contenidoHtml,
+    );
+  }
+
   /**
    * Genera el contenido del talonario con headers de grupo y paginación
    */
@@ -77,7 +99,9 @@ export class TalonarioPdfService {
       // Detectar cambio de grupo
       if (nombreGrupo !== grupoActual) {
         // Insertar header de grupo
-        filasHtmlActual += this.generarGrupoHeaderHtml(nombreGrupo || 'Sin Grupo');
+        filasHtmlActual += this.generarGrupoHeaderHtml(
+          nombreGrupo || 'Sin Grupo',
+        );
         filasEnPaginaActual++;
         grupoActual = nombreGrupo;
       }
@@ -118,7 +142,6 @@ export class TalonarioPdfService {
       socioDireccion: cuota.socio?.direccion || '',
       periodo: cuota.periodo,
       monto: Number(cuota.monto),
-      barcode: `${cuota.periodo?.split('-')[1] || '00'}-${cuota.periodo?.split('-')[0] || '0000'}-${cuota.socioId}`,
       grupoNombre: cuota.socio?.grupoFamiliar?.nombre,
       grupoOrden: cuota.socio?.grupoFamiliar?.orden,
     }));
@@ -142,7 +165,8 @@ export class TalonarioPdfService {
   }
   private generarFilaHtml(cuota: TalonarioData, num: number): string {
     const nombreCompleto = `${cuota.socioNombre} ${cuota.socioApellido}`.trim();
-    const montoFormateado = cuota.monto > 0 ? `$${Math.round(cuota.monto)}` : '';
+    const montoFormateado =
+      cuota.monto > 0 ? `$${Math.round(cuota.monto)}` : '';
 
     return `
         <div class="row">
@@ -183,9 +207,6 @@ export class TalonarioPdfService {
                                 <span class="campo-valor">${montoFormateado}</span>
                             </div>
                         </div>
-                    </div>
-                    <div class="barcode-section">
-                        <svg class="barcode" data-code="${cuota.barcode || `EMPTY-${num}`}"></svg>
                     </div>
                 </div>
                 <div class="footer footer-club">Talón para el Club</div>
@@ -241,7 +262,6 @@ export class TalonarioPdfService {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Talonario - Club de Cazadores La Victoria</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <style>
         @page { size: A4; margin: 0; }
         * { box-sizing: border-box; }
@@ -266,8 +286,6 @@ export class TalonarioPdfService {
         .campo-valor { flex: 1; border-bottom: 1px solid #aaa; min-height: 12px; font-size: 10px; color: #333; }
         .campo-row { display: flex; gap: 4mm; }
         .campo-row .campo { flex: 1; }
-        .barcode-section { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 32mm; padding-left: 2mm; border-left: 1px dashed #ddd; }
-        .barcode-section svg { max-width: 30mm; height: auto; }
         .valor-section { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 20mm; padding-left: 2mm; border-left: 1px dashed #ddd; }
         .valor-label { font-size: 7px; color: #666; text-transform: uppercase; margin-bottom: 1mm; }
         .valor-monto { font-size: 14px; font-weight: 700; color: #1a4d2e; }
@@ -281,26 +299,6 @@ export class TalonarioPdfService {
 </head>
 <body>
     <!-- PÁGINAS GENERADAS DINÁMICAMENTE -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('.barcode').forEach(function (svg) {
-                const code = svg.getAttribute('data-code');
-                if (code && !code.startsWith('EMPTY')) {
-                    JsBarcode(svg, code, {
-                        format: "CODE128",
-                        width: 1.5,
-                        height: 35,
-                        displayValue: true,
-                        fontSize: 9,
-                        margin: 2,
-                        textMargin: 1
-                    });
-                } else {
-                    svg.style.display = 'none';
-                }
-            });
-        });
-    </script>
 </body>
 </html>`;
   }

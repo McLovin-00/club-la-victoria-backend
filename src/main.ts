@@ -81,7 +81,7 @@ async function bootstrap() {
     });
 
     logger.log(
-      `Swagger UI available at http://localhost:${config.getPort()}/api/docs`,
+      `Swagger UI available at http://${config.getHost()}:${config.getPort()}/api/docs`,
     );
   } else {
     logger.log('Swagger UI disabled in production mode');
@@ -91,6 +91,10 @@ async function bootstrap() {
   const HOST = config.getHost();
 
   await app.listen(PORT, HOST);
-  logger.log(`Server running on http://${HOST}:${PORT}`);
+  logger.log(
+    HOST === '0.0.0.0'
+      ? `Server running on http://0.0.0.0:${PORT} (LAN: http://<tu-ip-local>:${PORT})`
+      : `Server running on http://${HOST}:${PORT}`,
+  );
 }
 void bootstrap();

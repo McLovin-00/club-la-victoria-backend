@@ -76,7 +76,7 @@ export class AppConfigService {
   }
 
   getHost(): string {
-    return this.configService.get<string>(VariablesEntorno.HOST, 'localhost');
+    return this.configService.get<string>(VariablesEntorno.HOST, '0.0.0.0');
   }
 
   //Variables de entorno DB

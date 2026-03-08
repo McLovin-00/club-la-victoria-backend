@@ -100,9 +100,11 @@ export class TemporadasService {
    * Verifica si una temporada tiene registros de ingreso de pileta asociados
    * Un registro está asociado a una temporada si su fecha de ingreso está dentro del rango de la temporada
    */
-  async tieneRegistrosPileta(id: number): Promise<{ tieneRegistros: boolean; cantidad: number }> {
+  async tieneRegistrosPileta(
+    id: number,
+  ): Promise<{ tieneRegistros: boolean; cantidad: number }> {
     const temporada = await this.temporadaRepository.findOne({ where: { id } });
-    
+
     if (!temporada) {
       throw new CustomError(
         ERROR_MESSAGES.TEMPORADA_NOT_FOUND,
@@ -113,9 +115,15 @@ export class TemporadasService {
 
     const cantidad = await this.registroIngresoRepository
       .createQueryBuilder('registro')
-      .where('registro.tipoIngreso = :tipoIngreso', { tipoIngreso: TipoIngreso.SOCIO_PILETA })
-      .andWhere('registro.fechaHoraIngreso >= :fechaInicio', { fechaInicio: temporada.fechaInicio })
-      .andWhere('registro.fechaHoraIngreso <= :fechaFin', { fechaFin: `${temporada.fechaFin} 23:59:59` })
+      .where('registro.tipoIngreso = :tipoIngreso', {
+        tipoIngreso: TipoIngreso.SOCIO_PILETA,
+      })
+      .andWhere('registro.fechaHoraIngreso >= :fechaInicio', {
+        fechaInicio: temporada.fechaInicio,
+      })
+      .andWhere('registro.fechaHoraIngreso <= :fechaFin', {
+        fechaFin: `${temporada.fechaFin} 23:59:59`,
+      })
       .getCount();
 
     return {

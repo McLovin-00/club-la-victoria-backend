@@ -207,9 +207,7 @@ export class GruposFamiliaresController {
   })
   @ApiResponse({ status: 404, description: 'Socio no encontrado' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  async desasignarSocio(
-    @Param('socioId', ParseIntPipe) socioId: number,
-  ) {
+  async desasignarSocio(@Param('socioId', ParseIntPipe) socioId: number) {
     await this.gruposService.desasignarSocio(socioId);
     return { message: 'Socio desasignado exitosamente' };
   }

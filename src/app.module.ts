@@ -18,7 +18,18 @@ import { Cuota } from './cobros/entities/cuota.entity';
 import { PagoCuota } from './cobros/entities/pago-cuota.entity';
 import { Notificacion } from './notificaciones/entities/notificacion.entity';
 import { GrupoFamiliar } from './grupos-familiares/entities/grupo-familiar.entity';
+import { MetodoPago } from './metodos-pago/entities/metodo-pago.entity';
+import { CobradoresModule } from './cobradores/cobradores.module';
+import {
+  Cobrador,
+  CobradorComisionConfig,
+  CobradorCuentaCorrienteMovimiento,
+  CobradorDispositivo,
+} from './cobradores/entities';
+import { CobroOperacion } from './cobros/entities/cobro-operacion.entity';
+import { CobroOperacionLinea } from './cobros/entities/cobro-operacion-linea.entity';
 import { GruposFamiliaresModule } from './grupos-familiares/grupos-familiares.module';
+import { MetodosPagoModule } from './metodos-pago/metodos-pago.module';
 
 import { AppConfigModule } from './config/AppConfig/app-config.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
@@ -50,7 +61,9 @@ import { CategoriaRulesService } from './socios/services/categoria-rules.service
     HealthModule,
     CategoriasSocioModule,
     CobrosModule,
+    CobradoresModule,
     GruposFamiliaresModule,
+    MetodosPagoModule,
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
@@ -73,6 +86,13 @@ import { CategoriaRulesService } from './socios/services/categoria-rules.service
           PagoCuota,
           Notificacion,
           GrupoFamiliar,
+          MetodoPago,
+          Cobrador,
+          CobradorDispositivo,
+          CobradorComisionConfig,
+          CobradorCuentaCorrienteMovimiento,
+          CobroOperacion,
+          CobroOperacionLinea,
         ],
 
         synchronize: configService.getNodeEnv() === 'development',

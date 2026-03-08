@@ -9,10 +9,18 @@ import {
   IsOptional,
   IsArray,
   ArrayMinSize,
+  ArrayMaxSize,
+  ValidateNested,
+  IsPositive,
+  IsDateString,
+  Validate,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
+
 import { ApiProperty } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
-import { MetodoPago } from '../entities/pago-cuota.entity';
+import { ActorCobro, OrigenCobro } from '../entities/cobro-operacion.entity';
 
 export class GenerarCuotasDto {
   @ApiProperty({
@@ -29,30 +37,21 @@ export class GenerarCuotasDto {
 
 export class RegistrarPagoDto {
   @ApiProperty({
-    description: 'Código de barras de la cuota (formato MM-socioId)',
-    example: '01-123',
-    required: false,
-  })
-  @IsString()
-  @IsOptional()
-  barcode?: string;
-
-  @ApiProperty({
-    description: 'ID de la cuota (alternativa al barcode)',
+    description: 'ID de la cuota a pagar',
     example: 123,
-    required: false,
   })
-  @IsNumber()
-  @IsOptional()
-  cuotaId?: number;
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  cuotaId!: number;
 
   @ApiProperty({
-    description: 'Método de pago utilizado',
-    enum: MetodoPago,
-    example: MetodoPago.EFECTIVO,
+    description: 'ID del método de pago utilizado',
+    example: 1,
   })
-  @IsEnum(MetodoPago)
-  metodoPago!: MetodoPago;
+  @IsInt()
+  @Type(() => Number)
+  metodoPagoId!: number;
 
   @ApiProperty({
     description: 'Observaciones adicionales sobre el pago',
@@ -66,22 +65,23 @@ export class RegistrarPagoDto {
 
 export class RegistrarPagoMultipleDto {
   @ApiProperty({
-    description: 'Lista de códigos de barras de las cuotas a pagar',
-    example: ['CUOTA-123', 'CUOTA-124', 'CUOTA-125'],
-    type: [String],
+    description: 'Lista de IDs de las cuotas a pagar',
+    example: [123, 124, 125],
+    type: [Number],
   })
   @IsArray()
   @ArrayMinSize(1, { message: 'Debe incluir al menos una cuota para pagar' })
-  @IsString({ each: true })
-  barcodes!: string[];
+  @Type(() => Number)
+  @IsInt({ each: true })
+  cuotaIds!: number[];
 
   @ApiProperty({
-    description: 'Método de pago utilizado para todas las cuotas',
-    enum: MetodoPago,
-    example: MetodoPago.TRANSFERENCIA,
+    description: 'ID del método de pago utilizado para todas las cuotas',
+    example: 1,
   })
-  @IsEnum(MetodoPago)
-  metodoPago!: MetodoPago;
+  @IsInt()
+  @Type(() => Number)
+  metodoPagoId!: number;
 
   @ApiProperty({
     description: 'Observaciones adicionales sobre el pago',
@@ -91,6 +91,209 @@ export class RegistrarPagoMultipleDto {
   @IsString()
   @IsOptional()
   observaciones?: string;
+}
+
+export class ConceptoCobroDto {
+  @ApiProperty({
+    description: 'Nombre del concepto no-cuota',
+    example: 'RIFA',
+  })
+  @IsString()
+  concepto!: string;
+
+  @ApiProperty({
+    description: 'Descripción opcional del concepto',
+    required: false,
+    example: 'Rifa mes de marzo',
+  })
+  @IsOptional()
+  @IsString()
+  descripcion?: string;
+
+  @ApiProperty({
+    description: 'Monto del concepto',
+    example: 12000,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  monto!: number;
+}
+
+export class PagoMetodoMontoDto {
+  @ApiProperty({
+    description: 'ID del método de pago utilizado',
+    example: 1,
+  })
+  @IsInt()
+  @Type(() => Number)
+  metodoPagoId!: number;
+
+  @ApiProperty({
+    description: 'Importe asignado a este método de pago',
+    example: 12000,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  monto!: number;
+}
+
+export class RegistrarOperacionCobroDto {
+  @ApiProperty({
+    description: 'ID del socio titular del cobro',
+    example: 12,
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  socioId!: number;
+
+  @ApiProperty({
+    description: 'IDs de cuotas a cancelar dentro de la operación',
+    example: [101, 102],
+    type: [Number],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  cuotaIds?: number[];
+
+  @ApiProperty({
+    description: 'Conceptos no-cuota adicionales de la operación',
+    type: [ConceptoCobroDto],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConceptoCobroDto)
+  conceptos?: ConceptoCobroDto[];
+
+
+  @Validate(function (object: RegistrarOperacionCobroDto) {
+    const hasCuotas = object.cuotaIds && object.cuotaIds.length > 0;
+    const hasConceptos = object.conceptos && object.conceptos.length > 0;
+    
+    if (!hasCuotas && !hasConceptos) {
+      throw new Error('Debe incluir al menos una cuota o un concepto en la operación');
+    }
+    
+    return true;
+  })
+  private readonly validateAtLeastOneItem?: any;
+
+  @ApiProperty({
+    description: 'ID del método de pago principal',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  metodoPagoId!: number;
+
+  @ApiProperty({
+    description:
+      'Distribución de importes por método de pago (1 o 2 métodos). Si se informa, reemplaza metodoPagoId.',
+    type: [PagoMetodoMontoDto],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Debe indicar al menos un método de pago' })
+  @ArrayMaxSize(2, { message: 'Solo se permiten hasta dos métodos de pago' })
+  @ValidateNested({ each: true })
+  @Type(() => PagoMetodoMontoDto)
+  pagos?: PagoMetodoMontoDto[];
+
+  @ApiProperty({
+    description: 'Actor del cobro',
+    enum: ActorCobro,
+    example: ActorCobro.COBRADOR,
+  })
+  @IsEnum(ActorCobro)
+  actorCobro!: ActorCobro;
+
+  @ApiProperty({
+    description: 'Origen del cobro',
+    enum: OrigenCobro,
+    example: OrigenCobro.MOBILE,
+  })
+  @IsEnum(OrigenCobro)
+  origenCobro!: OrigenCobro;
+
+  @ApiProperty({
+    description: 'ID del cobrador (obligatorio si actor = COBRADOR)',
+    required: false,
+    example: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cobradorId?: number;
+
+  @ApiProperty({
+    description:
+      'Identificador de instalación móvil (opcional; se usa para trazabilidad/idempotencia en clientes móviles)',
+    required: false,
+    example: 'device-abc123',
+  })
+  @IsOptional()
+  @IsString()
+  installationId?: string;
+
+  @ApiProperty({
+    description: 'Total de la operación (debe coincidir con suma de líneas)',
+    example: 24000,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @IsPositive()
+  total!: number;
+
+  @ApiProperty({
+    description: 'Clave de idempotencia para evitar dobles registros',
+    required: false,
+    example: 'device-abc-20260305-op-0001',
+  })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+
+  @ApiProperty({
+    description: 'Referencia externa',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  referencia?: string;
+
+  @ApiProperty({
+    description: 'Observaciones generales',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
+}
+
+export class MisCobranzasRangoDto {
+  @ApiProperty({
+    description: 'Fecha/hora inicio (ISO 8601)',
+    example: '2026-03-01T00:00:00.000Z',
+  })
+  @IsDateString()
+  desde!: string;
+
+  @ApiProperty({
+    description: 'Fecha/hora fin (ISO 8601)',
+    example: '2026-03-31T23:59:59.999Z',
+  })
+  @IsDateString()
+  hasta!: string;
 }
 
 export class CuentaCorrienteQueryDto {
@@ -132,7 +335,8 @@ export class TalonarioQueryDto {
 
 export class TarjetaCentroArchivoQueryDto {
   @ApiProperty({
-    description: 'Período para generar archivo Tarjeta Centro (formato YYYY-MM)',
+    description:
+      'Período para generar archivo Tarjeta Centro (formato YYYY-MM)',
     example: '2026-02',
     pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
   })
@@ -141,6 +345,111 @@ export class TarjetaCentroArchivoQueryDto {
     message: 'El período debe tener el formato YYYY-MM (ej: 2026-02)',
   })
   periodo!: string;
+}
+
+export class TarjetaCentroResultadoDto {
+  @ApiProperty({
+    description: 'ID de la cuota a procesar',
+    example: 123,
+  })
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  cuotaId!: number;
+
+  @ApiProperty({
+    description: 'Indica si la tarjeta fue aprobada (true) o rechazada (false)',
+    example: true,
+  })
+  @IsBoolean()
+  aprobada!: boolean;
+
+  @ApiProperty({
+    description: 'Observación opcional del resultado de la tarjeta',
+    example: 'Respuesta lote 15 del banco',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
+}
+
+export class RegistrarPagoCuotasSeleccionadasDto {
+  @ApiProperty({
+    description: 'ID del socio titular de las cuotas',
+    example: 12,
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  socioId!: number;
+
+  @ApiProperty({
+    description: 'IDs de las cuotas a pagar',
+    example: [101, 102, 103],
+    type: [Number],
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Debe seleccionar al menos una cuota' })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  cuotaIds!: number[];
+
+  @ApiProperty({
+    description: 'Distribución de importes por método de pago (1 o 2 métodos)',
+    type: [PagoMetodoMontoDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Debe indicar al menos un método de pago' })
+  @ArrayMaxSize(2, { message: 'Solo se permiten hasta dos métodos de pago' })
+  @ValidateNested({ each: true })
+  @Type(() => PagoMetodoMontoDto)
+  pagos!: PagoMetodoMontoDto[];
+
+  @ApiProperty({
+    description: 'Observaciones generales del pago',
+    example: 'Regularización de deuda de 3 meses',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
+}
+
+export class ReciboMultipleCuotasDto {
+  @ApiProperty({
+    description: 'ID del socio titular de las cuotas',
+    example: 12,
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  socioId!: number;
+
+  @ApiProperty({
+    description: 'IDs de las cuotas a incluir en el recibo',
+    example: [101, 102],
+    type: [Number],
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Debe seleccionar al menos una cuota' })
+  @Type(() => Number)
+  @IsInt({ each: true })
+  cuotaIds!: number[];
+}
+
+export class ProcesarResultadosTarjetaCentroDto {
+  @ApiProperty({
+    description: 'Resultados de procesamiento por cuota de tarjeta del centro',
+    type: [TarjetaCentroResultadoDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1, {
+    message: 'Debe incluir al menos un resultado de tarjeta del centro',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => TarjetaCentroResultadoDto)
+  resultados!: TarjetaCentroResultadoDto[];
 }
 
 export class SocioElegibleDto {
@@ -306,12 +615,26 @@ export class EstadoPagosQueryDto {
   @ApiProperty({
     description:
       'Filtro de estado de pago. PAGADA/PENDIENTE/SIN_CUOTA usan el mes de referencia cuando se envía.',
-    enum: ['TODOS', 'PAGADA', 'PENDIENTE', 'SIN_CUOTA', 'CON_PAGO', 'CON_DEUDA'],
+    enum: [
+      'TODOS',
+      'PAGADA',
+      'PENDIENTE',
+      'SIN_CUOTA',
+      'CON_PAGO',
+      'CON_DEUDA',
+    ],
     required: false,
     example: 'TODOS',
   })
   @IsOptional()
-  @IsEnum(['TODOS', 'PAGADA', 'PENDIENTE', 'SIN_CUOTA', 'CON_PAGO', 'CON_DEUDA'])
+  @IsEnum([
+    'TODOS',
+    'PAGADA',
+    'PENDIENTE',
+    'SIN_CUOTA',
+    'CON_PAGO',
+    'CON_DEUDA',
+  ])
   estadoPago?:
     | 'TODOS'
     | 'PAGADA'
@@ -344,7 +667,11 @@ export class SocioPagosAnualDto {
   @IsString()
   apellido!: string;
 
-  @ApiProperty({ description: 'DNI del socio', required: false, example: '30111222' })
+  @ApiProperty({
+    description: 'DNI del socio',
+    required: false,
+    example: '30111222',
+  })
   @IsOptional()
   @IsString()
   dni?: string;
@@ -437,6 +764,30 @@ export class CuotasQueryDto {
   @IsString()
   @IsOptional()
   busqueda?: string;
+
+  @ApiProperty({
+    description: 'Filtrar cuotas por socios con o sin tarjeta del centro',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+
+    if (value === true || value === 'true') {
+      return true;
+    }
+
+    if (value === false || value === 'false') {
+      return false;
+    }
+
+    return value;
+  })
+  tarjetaCentro?: boolean;
 
   @ApiProperty({
     description: 'Página actual (1-indexed)',

@@ -122,7 +122,10 @@ export class GruposFamiliaresService {
   /**
    * Actualiza un grupo familiar
    */
-  async update(id: number, dto: UpdateGrupoFamiliarDto): Promise<GrupoFamiliar> {
+  async update(
+    id: number,
+    dto: UpdateGrupoFamiliarDto,
+  ): Promise<GrupoFamiliar> {
     try {
       const grupo = await this.findOne(id);
 

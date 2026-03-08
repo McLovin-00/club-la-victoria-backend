@@ -15,7 +15,10 @@ export class TarjetaCentro23fService {
 
   constructor(private readonly appConfigService: AppConfigService) {}
 
-  generarArchivo(periodo: string, cuotas: Cuota[]): { fileName: string; content: string } {
+  generarArchivo(
+    periodo: string,
+    cuotas: Cuota[],
+  ): { fileName: string; content: string } {
     const fechaProceso = this.formatearFechaDDMMAA(new Date());
     const emisor = this.appConfigService.getTarjetaCentroEmisor();
     const nombreComercio = this.appConfigService.getTarjetaCentroNombre();
@@ -27,7 +30,10 @@ export class TarjetaCentro23fService {
         return Boolean(cuota.socio?.tarjetaCentro && numeroTarjeta);
       })
       .map((cuota) => {
-        const numeroTarjeta = (cuota.socio?.numeroTarjetaCentro ?? '').replace(/\D/g, '').padStart(16, '0').slice(-16);
+        const numeroTarjeta = (cuota.socio?.numeroTarjetaCentro ?? '')
+          .replace(/\D/g, '')
+          .padStart(16, '0')
+          .slice(-16);
         const referencia = String(cuota.id).padStart(12, '0');
         const codigoImporte = Math.round(Number(cuota.monto) / 100);
 
@@ -53,7 +59,8 @@ export class TarjetaCentro23fService {
       ),
     );
 
-    const totalControl = detalles.reduce((acc, detalle) => acc + detalle.codigoImporte, 0) * 10;
+    const totalControl =
+      detalles.reduce((acc, detalle) => acc + detalle.codigoImporte, 0) * 10;
     const trailer = this.ajustarALargo(
       `${emisor}49${fechaProceso}${String(detalles.length).padStart(7, '0')}${String(totalControl).padStart(12, '0')}`,
       TarjetaCentro23fService.LARGO_LINEA,

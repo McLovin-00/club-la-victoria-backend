@@ -10,13 +10,12 @@ import {
   TipoIngreso,
   MetodoPago,
 } from '../registro-ingreso/entities/registro-ingreso.entity';
+import { MetodoPago as MetodoPagoEntity } from '../metodos-pago/entities/metodo-pago.entity';
 import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.entity';
 import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
 import { Cuota, EstadoCuota } from '../cobros/entities/cuota.entity';
-import {
-  MetodoPago as MetodoPagoCuota,
-  PagoCuota,
-} from '../cobros/entities/pago-cuota.entity';
+import { PagoCuota } from '../cobros/entities/pago-cuota.entity';
+import { Cobrador } from '../cobradores/entities';
 import * as bcrypt from 'bcrypt';
 import { AUTH } from '../constants/auth.constants';
 
@@ -337,6 +336,7 @@ type PerfilPagoSeed = 'AL_DIA' | 'DEUDA_PARCIAL' | 'MOROSO';
 @Injectable()
 export class SeedService {
   private readonly logger = new Logger(SeedService.name);
+  private static readonly MAX_CUOTAS_IMPAGAS = 4;
 
   constructor(
     @InjectRepository(Usuario)
@@ -357,6 +357,10 @@ export class SeedService {
     private readonly cuotaRepository: Repository<Cuota>,
     @InjectRepository(PagoCuota)
     private readonly pagoCuotaRepository: Repository<PagoCuota>,
+    @InjectRepository(Cobrador)
+    private readonly cobradorRepository: Repository<Cobrador>,
+    @InjectRepository(MetodoPagoEntity)
+    private readonly metodoPagoRepository: Repository<MetodoPagoEntity>,
   ) {}
 
   /**
@@ -366,6 +370,7 @@ export class SeedService {
   async run() {
     this.logger.log('🚀 Iniciando seed de producción...');
     await this.createCategoriasSocio();
+    await this.createCobradoresBase();
     this.logger.log('✅ Seed de producción finalizado.');
   }
 
@@ -375,6 +380,8 @@ export class SeedService {
    */
   async runDevSeed() {
     this.logger.log('🚀 Iniciando seed de desarrollo...');
+    await this.createCobradoresBase();
+    await this.createMetodosPago();
     await this.createAdminUser();
     await this.createTemporadas();
     const seCrearonSocios = await this.createGruposFamiliares();
@@ -387,6 +394,53 @@ export class SeedService {
     await this.createCuotasSocios2025();
     await this.createRegistrosIngreso();
     this.logger.log('✅ Seed de desarrollo finalizado.');
+  }
+
+  private async createCobradoresBase() {
+    const cobradoresBase = [
+      'Cobradora Norte',
+      'Cobradora Centro',
+      'Cobradora Sur',
+      'Ana María Rodríguez (chuli)',
+    ];
+
+    for (const nombre of cobradoresBase) {
+      const existe = await this.cobradorRepository.findOne({
+        where: { nombre },
+      });
+      if (!existe) {
+        await this.cobradorRepository.save(
+          this.cobradorRepository.create({
+            nombre,
+            activo: true,
+          }),
+        );
+        this.logger.log(`🧾 Cobrador "${nombre}" creado.`);
+      }
+    }
+  }
+
+  private async createMetodosPago() {
+    const metodosPagoBase = [
+      { nombre: 'EFECTIVO', descripcion: 'Pago en efectivo', orden: 1 },
+      { nombre: 'TRANSFERENCIA', descripcion: 'Transferencia bancaria', orden: 2 },
+      { nombre: 'TARJETA', descripcion: 'Pago con tarjeta de débito/crédito', orden: 3 },
+    ];
+
+    for (const metodo of metodosPagoBase) {
+      const existe = await this.metodoPagoRepository.findOne({
+        where: { nombre: metodo.nombre },
+      });
+      if (!existe) {
+        await this.metodoPagoRepository.save(
+          this.metodoPagoRepository.create({
+            ...metodo,
+            activo: true,
+          }),
+        );
+        this.logger.log(`💳 Método de pago "${metodo.nombre}" creado.`);
+      }
+    }
   }
 
   private getRandom<T>(arr: T[]): T {
@@ -409,13 +463,18 @@ export class SeedService {
   }
 
   private generateBirthDate(edadMinima: number, edadMaxima: number): string {
-    const year = new Date().getFullYear() - this.getRandomInt(edadMinima, edadMaxima);
+    const year =
+      new Date().getFullYear() - this.getRandomInt(edadMinima, edadMaxima);
     const month = this.getRandomInt(1, 12).toString().padStart(2, '0');
     const day = this.getRandomInt(1, 28).toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
-  private generateEmail(nombre: string, apellido: string, sufijo: string): string {
+  private generateEmail(
+    nombre: string,
+    apellido: string,
+    sufijo: string,
+  ): string {
     return `${nombre.toLowerCase()}.${apellido.toLowerCase()}${sufijo}@email.com`
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '');
@@ -551,7 +610,9 @@ export class SeedService {
     let secuenciaTarjetaCentro = 0;
 
     // Seleccionar apellidos únicos para cada familia
-    const apellidosSeleccionados = [...APELLIDOS].sort(() => Math.random() - 0.5).slice(0, FAMILIAS_PREDEFINIDAS.length);
+    const apellidosSeleccionados = [...APELLIDOS]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, FAMILIAS_PREDEFINIDAS.length);
 
     for (let i = 0; i < FAMILIAS_PREDEFINIDAS.length; i++) {
       const familia = FAMILIAS_PREDEFINIDAS[i];
@@ -564,7 +625,8 @@ export class SeedService {
         descripcion: `Grupo familiar de la familia ${apellido}`,
         orden: i + 1,
       });
-      const grupoGuardado = await this.grupoFamiliarRepository.save(grupoFamiliar);
+      const grupoGuardado =
+        await this.grupoFamiliarRepository.save(grupoFamiliar);
       this.logger.log(`👨‍👩‍👧‍👦 Grupo familiar "${grupoFamiliar.nombre}" creado.`);
 
       const sociosFamilia: Socio[] = [];
@@ -577,7 +639,12 @@ export class SeedService {
       dniUsados.add(dniPadre);
 
       // Asignar categoría al padre: 70% ACTIVO, 20% VITALICIO, 10% HONORARIO
-      const categoriaPadre = i < 7 ? categoriaActivo : i < 9 ? categoriaVitalicio : categoriaHonorario;
+      const categoriaPadre =
+        i < 7
+          ? categoriaActivo
+          : i < 9
+            ? categoriaVitalicio
+            : categoriaHonorario;
       const padreTieneTarjetaCentro = i % 2 === 0;
 
       const socioPadre = this.socioRepository.create({
@@ -585,7 +652,11 @@ export class SeedService {
         apellido,
         dni: dniPadre,
         telefono: this.generatePhone(),
-        email: this.generateEmail(familia.padre.nombre, apellido, `_padre_${i}`),
+        email: this.generateEmail(
+          familia.padre.nombre,
+          apellido,
+          `_padre_${i}`,
+        ),
         fechaNacimiento: this.generateBirthDate(35, 55),
         direccion: direccionFam,
         estado: 'ACTIVO',
@@ -619,7 +690,11 @@ export class SeedService {
         apellido,
         dni: dniMadre,
         telefono: this.generatePhone(),
-        email: this.generateEmail(familia.madre.nombre, apellido, `_madre_${i}`),
+        email: this.generateEmail(
+          familia.madre.nombre,
+          apellido,
+          `_madre_${i}`,
+        ),
         fechaNacimiento: this.generateBirthDate(30, 50),
         direccion: direccionFam,
         estado: 'ACTIVO',
@@ -651,7 +726,8 @@ export class SeedService {
           nombre: hijo.nombre,
           apellido,
           dni: dniHijo,
-          telefono: this.getRandomInt(18, 25) > 20 ? this.generatePhone() : undefined, // Algunos hijos no tienen teléfono
+          telefono:
+            this.getRandomInt(18, 25) > 20 ? this.generatePhone() : undefined, // Algunos hijos no tienen teléfono
           email: this.generateEmail(hijo.nombre, apellido, `_hijo${j}_${i}`),
           fechaNacimiento: this.generateBirthDate(5, 25),
           direccion: direccionFam,
@@ -674,7 +750,9 @@ export class SeedService {
       // Guardar todos los socios de la familia
       await this.socioRepository.save(sociosFamilia);
       totalSocios += sociosFamilia.length;
-      this.logger.log(`   └─ ${sociosFamilia.length} miembros agregados a la familia ${apellido}`);
+      this.logger.log(
+        `   └─ ${sociosFamilia.length} miembros agregados a la familia ${apellido}`,
+      );
     }
 
     // Crear algunos socios individuales (sin grupo familiar) para variedad
@@ -693,7 +771,18 @@ export class SeedService {
       dniUsados.add(dni);
 
       // Asignar categoría variada a socios individuales
-      const categoriasIndividuales = [categoriaActivo, categoriaActivo, categoriaActivo, categoriaAdherente, categoriaAdherente, categoriaVitalicio, categoriaHonorario, categoriaActivo, categoriaActivo, categoriaAdherente];
+      const categoriasIndividuales = [
+        categoriaActivo,
+        categoriaActivo,
+        categoriaActivo,
+        categoriaAdherente,
+        categoriaAdherente,
+        categoriaVitalicio,
+        categoriaHonorario,
+        categoriaActivo,
+        categoriaActivo,
+        categoriaAdherente,
+      ];
       const categoriaIndividual = categoriasIndividuales[i];
       const tieneTarjetaCentro = i % 3 === 0 || i === sociosIndividuales - 1;
 
@@ -721,8 +810,12 @@ export class SeedService {
       }
     }
 
-    this.logger.log(`👥 ${totalSocios} socios creados (${FAMILIAS_PREDEFINIDAS.length} familias con grupos familiares + ${sociosIndividuales} individuales).`);
-    this.logger.log(`💳 ${totalSociosConTarjetaCentro} socios creados con tarjeta del centro.`);
+    this.logger.log(
+      `👥 ${totalSocios} socios creados (${FAMILIAS_PREDEFINIDAS.length} familias con grupos familiares + ${sociosIndividuales} individuales).`,
+    );
+    this.logger.log(
+      `💳 ${totalSociosConTarjetaCentro} socios creados con tarjeta del centro.`,
+    );
     return true;
   }
 
@@ -740,7 +833,8 @@ export class SeedService {
     }
 
     const categorias = await this.categoriaSocioRepository.find();
-    const categoriaActivo = categorias.find((c) => c.nombre === 'ACTIVO') ?? categorias[0];
+    const categoriaActivo =
+      categorias.find((c) => c.nombre === 'ACTIVO') ?? categorias[0];
 
     if (!categoriaActivo) {
       this.logger.warn(
@@ -895,7 +989,7 @@ export class SeedService {
       return (socioIndex % 3) + 1;
     }
 
-    return 4 + (socioIndex % 5);
+    return SeedService.MAX_CUOTAS_IMPAGAS;
   }
 
   private buildFechaPago(periodo: string, socioIndex: number): Date {
@@ -913,7 +1007,7 @@ export class SeedService {
 
   private async createCuotasSocios2025() {
     const sociosElegibles = await this.socioRepository.find({
-      where: { estado: 'ACTIVO' },
+      where: { estado: In(['ACTIVO', 'MOROSO']) },
       relations: ['categoria'],
       order: { id: 'ASC' },
     });
@@ -939,7 +1033,8 @@ export class SeedService {
     );
 
     const cuotasNuevas: Cuota[] = [];
-    const sociosMorososIds: number[] = [];
+    const sociosMorososIds = new Set<number>();
+    const sociosActivosIds = new Set<number>();
     let sociosAlDia = 0;
     let sociosConDeudaParcial = 0;
     let sociosMorosos = 0;
@@ -948,8 +1043,19 @@ export class SeedService {
 
     for (const [index, socio] of sociosConCategoriaNoExenta.entries()) {
       const perfil = this.getPerfilPagoSeed(index);
-      const cuotasPendientesSocio = this.getCantidadCuotasPendientes(perfil, index);
-      const cuotasPagadasSocio = PERIODOS_2025.length - cuotasPendientesSocio;
+      const cuotasExistentesSocio = cuotasExistentes2025.filter(
+        (cuota) => cuota.socioId === socio.id,
+      );
+      let cuotasPendientesSocio = cuotasExistentesSocio.filter(
+        (cuota) => cuota.estado === EstadoCuota.PENDIENTE,
+      ).length;
+
+      const cuotasPendientesObjetivo = this.getCantidadCuotasPendientes(
+        perfil,
+        index,
+      );
+      const cuotasPagadasSocio =
+        PERIODOS_2025.length - cuotasPendientesObjetivo;
 
       if (perfil === 'AL_DIA') {
         sociosAlDia++;
@@ -957,10 +1063,14 @@ export class SeedService {
         sociosConDeudaParcial++;
       } else {
         sociosMorosos++;
-        sociosMorososIds.push(socio.id);
       }
 
       for (const [periodoIndex, periodo] of PERIODOS_2025.entries()) {
+        if (cuotasPendientesSocio >= SeedService.MAX_CUOTAS_IMPAGAS) {
+          sociosMorososIds.add(socio.id);
+          break;
+        }
+
         const claveCuota = `${socio.id}-${periodo}`;
 
         if (cuotasExistentesPorClave.has(claveCuota)) {
@@ -971,15 +1081,12 @@ export class SeedService {
         const fechaPago = estaPagada
           ? this.buildFechaPago(periodo, index)
           : undefined;
-        const [anio, mes] = periodo.split('-');
-
         cuotasNuevas.push(
           this.cuotaRepository.create({
             socioId: socio.id,
             periodo,
             monto: Number(socio.categoria!.montoMensual),
             estado: estaPagada ? EstadoCuota.PAGADA : EstadoCuota.PENDIENTE,
-            barcode: `${mes}-${anio}-${socio.id}`,
             fechaPago,
           }),
         );
@@ -988,8 +1095,33 @@ export class SeedService {
           cuotasPagadas++;
         } else {
           cuotasPendientes++;
+          cuotasPendientesSocio++;
+
+          if (cuotasPendientesSocio >= SeedService.MAX_CUOTAS_IMPAGAS) {
+            sociosMorososIds.add(socio.id);
+          }
         }
       }
+
+      if (cuotasPendientesSocio >= SeedService.MAX_CUOTAS_IMPAGAS) {
+        sociosMorososIds.add(socio.id);
+      } else {
+        sociosActivosIds.add(socio.id);
+      }
+    }
+
+    if (sociosMorososIds.size > 0) {
+      await this.socioRepository.update(
+        { id: In([...sociosMorososIds]), estado: 'ACTIVO' },
+        { estado: 'MOROSO' },
+      );
+    }
+
+    if (sociosActivosIds.size > 0) {
+      await this.socioRepository.update(
+        { id: In([...sociosActivosIds]), estado: 'MOROSO' },
+        { estado: 'ACTIVO' },
+      );
     }
 
     if (cuotasNuevas.length === 0) {
@@ -1007,20 +1139,16 @@ export class SeedService {
         continue;
       }
 
-      const metodoPago =
-        index % 4 === 0
-          ? MetodoPagoCuota.EFECTIVO
-          : index % 4 === 1
-            ? MetodoPagoCuota.TRANSFERENCIA
-            : index % 4 === 2
-              ? MetodoPagoCuota.TARJETA_DEBITO
-              : MetodoPagoCuota.TARJETA_CREDITO;
+      const metodoPagoId =
+        index % 2 === 0
+          ? 1 // EFECTIVO
+          : 2; // TRANSFERENCIA
 
       pagosNuevos.push(
         this.pagoCuotaRepository.create({
           cuotaId: cuota.id,
           montoPagado: Number(cuota.monto),
-          metodoPago,
+          metodoPagoId,
           fechaPago: cuota.fechaPago,
           fechaEmisionCuota: this.buildFechaEmision(cuota.periodo),
           observaciones: 'Pago generado automáticamente por seed de desarrollo',
@@ -1030,13 +1158,6 @@ export class SeedService {
 
     if (pagosNuevos.length > 0) {
       await this.pagoCuotaRepository.save(pagosNuevos);
-    }
-
-    if (sociosMorososIds.length > 0) {
-      await this.socioRepository.update(
-        { id: In(sociosMorososIds), estado: 'ACTIVO' },
-        { estado: 'MOROSO' },
-      );
     }
 
     this.logger.log(

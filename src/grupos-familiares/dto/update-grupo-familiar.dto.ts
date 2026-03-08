@@ -6,7 +6,9 @@ import { CreateGrupoFamiliarDto } from './create-grupo-familiar.dto';
 /**
  * DTO para actualizar un grupo familiar existente
  */
-export class UpdateGrupoFamiliarDto extends PartialType(CreateGrupoFamiliarDto) {
+export class UpdateGrupoFamiliarDto extends PartialType(
+  CreateGrupoFamiliarDto,
+) {
   @ApiProperty({
     description: 'Nombre del grupo familiar',
     example: 'Familia García López',

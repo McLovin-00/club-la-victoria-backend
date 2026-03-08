@@ -86,7 +86,7 @@ export class TemporadasController {
   })
   @ApiResponse({ status: 404, description: 'Temporada no encontrada' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string) {
     return this.temporadasService.findOne(+id);
   }
 

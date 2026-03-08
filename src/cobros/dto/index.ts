@@ -2,10 +2,18 @@ export {
   GenerarCuotasDto,
   RegistrarPagoDto,
   RegistrarPagoMultipleDto,
+  RegistrarOperacionCobroDto,
+  ConceptoCobroDto,
+  MisCobranzasRangoDto,
+  RegistrarPagoCuotasSeleccionadasDto,
+  ReciboMultipleCuotasDto,
+  PagoMetodoMontoDto,
   CuentaCorrienteQueryDto,
   ReporteCobranzaQueryDto,
   TalonarioQueryDto,
   TarjetaCentroArchivoQueryDto,
+  TarjetaCentroResultadoDto,
+  ProcesarResultadosTarjetaCentroDto,
   SocioElegibleDto,
   SociosElegiblesResponseDto,
   GenerarCuotasSeleccionDto,
@@ -27,3 +35,4 @@ export {
   ReporteCobranzaMesDto,
   ReporteCobranzaRangoResponseDto,
 } from './cobros.dto';
+export { CobroSocioDto, RegistrarCobroGrupalDto } from './registrar-cobro-grupal.dto';

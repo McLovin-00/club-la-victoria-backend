@@ -8,7 +8,9 @@ import {
   ReporteCobranza,
 } from '../cobros.service';
 import { Cuota, EstadoCuota } from '../entities/cuota.entity';
-import { PagoCuota, MetodoPago } from '../entities/pago-cuota.entity';
+import { PagoCuota } from '../entities/pago-cuota.entity';
+import { CobroOperacion } from '../entities/cobro-operacion.entity';
+import { CobroOperacionLinea } from '../entities/cobro-operacion-linea.entity';
 import { Socio } from '../../socios/entities/socio.entity';
 import { CustomError } from 'src/constants/errors/custom-error';
 import { NotificacionesService } from '../../notificaciones/notificaciones.service';
@@ -33,6 +35,7 @@ describe('CobrosService', () => {
     manager: {
       find: jest.fn(),
       findOne: jest.fn(),
+      count: jest.fn(),
       save: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -72,6 +75,24 @@ describe('CobrosService', () => {
           },
         },
         {
+          provide: getRepositoryToken(CobroOperacion),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(CobroOperacionLinea),
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+          },
+        },
+        {
           provide: DataSource,
           useValue: {
             createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
@@ -92,7 +113,7 @@ describe('CobrosService', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   describe('generarCuotasMensuales', () => {
@@ -150,7 +171,6 @@ describe('CobrosService', () => {
         periodo: '2026-02',
         monto: 5000,
         estado: EstadoCuota.PENDIENTE,
-        barcode: 'CUOTA-test-1',
       });
       mockQueryRunner.manager.save.mockResolvedValue({ id: 1 });
 
@@ -207,6 +227,74 @@ describe('CobrosService', () => {
     });
   });
 
+  describe('getSociosElegibles', () => {
+    it('debería usar monto histórico cuando ya existe cuota del período', async () => {
+      jest.spyOn(socioRepository, 'find').mockResolvedValue([
+        {
+          id: 1,
+          nombre: 'Juan',
+          apellido: 'Perez',
+          dni: '12345678',
+          estado: 'ACTIVO',
+          tarjetaCentro: false,
+          categoria: { id: 1, nombre: 'ACTIVO', montoMensual: 15000, exento: false },
+        },
+        {
+          id: 2,
+          nombre: 'Ana',
+          apellido: 'Gomez',
+          dni: '23456789',
+          estado: 'ACTIVO',
+          tarjetaCentro: true,
+          categoria: { id: 1, nombre: 'ACTIVO', montoMensual: 15000, exento: false },
+        },
+      ] as unknown as Socio[]);
+
+      jest.spyOn(cuotaRepository, 'find').mockResolvedValue([
+        {
+          socioId: 1,
+          monto: 10000,
+          createdAt: new Date('2026-01-01T10:00:00.000Z'),
+        },
+      ] as unknown as Cuota[]);
+
+      const result = await service.getSociosElegibles('2026-01');
+
+      const socioConCuota = result.socios.find((s) => s.id === 1);
+      const socioSinCuota = result.socios.find((s) => s.id === 2);
+
+      expect(socioConCuota).toBeDefined();
+      expect(socioConCuota?.cuotaExistente).toBe(true);
+      expect(socioConCuota?.montoMensual).toBe(10000);
+
+      expect(socioSinCuota).toBeDefined();
+      expect(socioSinCuota?.cuotaExistente).toBe(false);
+      expect(socioSinCuota?.montoMensual).toBe(15000);
+    });
+
+    it('debería usar el monto de categoría cuando no existe cuota para el período', async () => {
+      jest.spyOn(socioRepository, 'find').mockResolvedValue([
+        {
+          id: 10,
+          nombre: 'Laura',
+          apellido: 'Diaz',
+          dni: '30111222',
+          estado: 'ACTIVO',
+          tarjetaCentro: false,
+          categoria: { id: 2, nombre: 'ADHERENTE', montoMensual: 8000, exento: false },
+        },
+      ] as unknown as Socio[]);
+
+      jest.spyOn(cuotaRepository, 'find').mockResolvedValue([]);
+
+      const result = await service.getSociosElegibles('2026-02');
+
+      expect(result.socios).toHaveLength(1);
+      expect(result.socios[0].cuotaExistente).toBe(false);
+      expect(result.socios[0].montoMensual).toBe(8000);
+    });
+  });
+
   describe('registrarPago', () => {
     it('debería registrar un pago correctamente', async () => {
       const fechaEmisionCuota = new Date('2026-02-01T10:00:00.000Z');
@@ -217,23 +305,25 @@ describe('CobrosService', () => {
         periodo: '2026-02',
         monto: 5000,
         estado: EstadoCuota.PENDIENTE,
-        barcode: '02-2026-123',
         createdAt: fechaEmisionCuota,
         socio: { id: 1, nombre: 'Juan', apellido: 'Pérez' },
       };
 
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockCuota);
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(mockCuota)
+        .mockResolvedValueOnce({ id: 1, estado: 'ACTIVO' });
+      mockQueryRunner.manager.count.mockResolvedValue(2);
       mockQueryRunner.manager.create.mockReturnValue({
         cuotaId: 1,
         montoPagado: 5000,
-        metodoPago: MetodoPago.EFECTIVO,
+        metodoPagoId: 1,
         fechaPago: new Date(),
       });
       mockQueryRunner.manager.save.mockResolvedValue({ id: 1 });
 
       const result = await service.registrarPago({
-        barcode: '02-2026-123',
-        metodoPago: MetodoPago.EFECTIVO,
+        cuotaId: 1,
+        metodoPagoId: 1,
       });
 
       expect(result.cuota.estado).toBe(EstadoCuota.PAGADA);
@@ -245,11 +335,48 @@ describe('CobrosService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
 
-    it('debería rechazar barcode con formato inválido', async () => {
+    it('debería reactivar socio moroso cuando queda con menos de 4 cuotas pendientes', async () => {
+      const fechaEmisionCuota = new Date('2026-02-01T10:00:00.000Z');
+      const mockCuota = {
+        id: 1,
+        socioId: 1,
+        periodo: '2026-02',
+        monto: 5000,
+        estado: EstadoCuota.PENDIENTE,
+        createdAt: fechaEmisionCuota,
+        socio: { id: 1, nombre: 'Agustin', apellido: 'Acosta' },
+      };
+
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(mockCuota)
+        .mockResolvedValueOnce({ id: 1, estado: 'MOROSO' });
+      mockQueryRunner.manager.count.mockResolvedValue(3);
+      mockQueryRunner.manager.create.mockReturnValue({
+        cuotaId: 1,
+        montoPagado: 5000,
+        metodoPagoId: 1,
+        fechaPago: new Date(),
+      });
+      mockQueryRunner.manager.save.mockResolvedValue({ id: 1 });
+
+      await service.registrarPago({
+        cuotaId: 1,
+        metodoPagoId: 1,
+      });
+
+      expect(mockQueryRunner.manager.update).toHaveBeenCalledWith(Socio, 1, {
+        estado: 'ACTIVO',
+      });
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('debería rechazar cuando no existe la cuota', async () => {
+      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+
       await expect(
         service.registrarPago({
-          barcode: 'INVALID-BARCODE',
-          metodoPago: MetodoPago.EFECTIVO,
+          cuotaId: 999,
+          metodoPagoId: 1,
         }),
       ).rejects.toThrow(CustomError);
     });
@@ -261,15 +388,14 @@ describe('CobrosService', () => {
         periodo: '2026-02',
         monto: 5000,
         estado: EstadoCuota.PAGADA,
-        barcode: 'CUOTA-test-123',
       };
 
       mockQueryRunner.manager.findOne.mockResolvedValue(mockCuota);
 
       await expect(
         service.registrarPago({
-          barcode: 'CUOTA-test-123',
-          metodoPago: MetodoPago.EFECTIVO,
+          cuotaId: 1,
+          metodoPagoId: 1,
         }),
       ).rejects.toThrow(CustomError);
     });
@@ -279,8 +405,8 @@ describe('CobrosService', () => {
 
       await expect(
         service.registrarPago({
-          barcode: 'CUOTA-noexiste',
-          metodoPago: MetodoPago.EFECTIVO,
+          cuotaId: 999,
+          metodoPagoId: 1,
         }),
       ).rejects.toThrow(CustomError);
     });
@@ -313,9 +439,17 @@ describe('CobrosService', () => {
       jest
         .spyOn(socioRepository, 'findOne')
         .mockResolvedValue(mockSocio as Socio);
+
+      const mockCuentaCorrienteQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockCuotas as Cuota[]),
+      };
+
       jest
-        .spyOn(cuotaRepository, 'find')
-        .mockResolvedValue(mockCuotas as Cuota[]);
+        .spyOn(cuotaRepository, 'createQueryBuilder')
+        .mockReturnValue(mockCuentaCorrienteQueryBuilder as unknown as any);
 
       const result = await service.obtenerCuentaCorriente(1);
 
@@ -432,11 +566,13 @@ describe('CobrosService', () => {
 
   describe('getMorososDetallados', () => {
     const createMockQueryBuilder = () => ({
+      leftJoin: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       innerJoin: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
       having: jest.fn().mockReturnThis(),
       andHaving: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
@@ -447,6 +583,28 @@ describe('CobrosService', () => {
       getCount: jest.fn().mockResolvedValue(1),
       getMany: jest.fn().mockResolvedValue([]),
     });
+
+    const setupSocioQueryBuilders = (
+      morosos: unknown[],
+      totalMorosos: unknown[] = morosos,
+      statsMorosos: unknown[] = morosos,
+    ) => {
+      const mainQueryBuilder = createMockQueryBuilder();
+      const totalQueryBuilder = createMockQueryBuilder();
+      const statsQueryBuilder = createMockQueryBuilder();
+
+      mainQueryBuilder.getMany.mockResolvedValue(morosos);
+      totalQueryBuilder.getMany.mockResolvedValue(totalMorosos);
+      statsQueryBuilder.getMany.mockResolvedValue(statsMorosos);
+      mainQueryBuilder.clone.mockReturnValue(totalQueryBuilder);
+
+      jest
+        .spyOn(socioRepository, 'createQueryBuilder')
+        .mockReturnValueOnce(mainQueryBuilder as unknown as any)
+        .mockReturnValueOnce(statsQueryBuilder as unknown as any);
+
+      return { mainQueryBuilder };
+    };
 
     it('deberia retornar lista de morosos sin filtros', async () => {
       const mockMorosos = [
@@ -462,13 +620,7 @@ describe('CobrosService', () => {
         },
       ];
 
-      const mockQueryBuilder = createMockQueryBuilder();
-      mockQueryBuilder.getMany.mockResolvedValueOnce(mockMorosos);
-      mockQueryBuilder.getCount.mockResolvedValueOnce(1);
-
-      jest
-        .spyOn(socioRepository, 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as unknown as any);
+      setupSocioQueryBuilders(mockMorosos);
 
       jest.spyOn(cuotaRepository, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
@@ -516,13 +668,7 @@ describe('CobrosService', () => {
         },
       ];
 
-      const mockQueryBuilder = createMockQueryBuilder();
-      mockQueryBuilder.getMany.mockResolvedValueOnce(mockMorosos);
-      mockQueryBuilder.getCount.mockResolvedValueOnce(1);
-
-      jest
-        .spyOn(socioRepository, 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as unknown as any);
+      const { mainQueryBuilder } = setupSocioQueryBuilders(mockMorosos);
 
       jest.spyOn(cuotaRepository, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
@@ -555,7 +701,7 @@ describe('CobrosService', () => {
         severidad: '3-meses' as any,
       });
 
-      expect(mockQueryBuilder.andHaving).toHaveBeenCalledWith(
+      expect(mainQueryBuilder.andHaving).toHaveBeenCalledWith(
         'COUNT(cuota.id) = :exacto',
         { exacto: 3 },
       );
@@ -574,13 +720,7 @@ describe('CobrosService', () => {
         },
       ];
 
-      const mockQueryBuilder = createMockQueryBuilder();
-      mockQueryBuilder.getMany.mockResolvedValueOnce(mockMorosos);
-      mockQueryBuilder.getCount.mockResolvedValueOnce(1);
-
-      jest
-        .spyOn(socioRepository, 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as unknown as any);
+      const { mainQueryBuilder } = setupSocioQueryBuilders(mockMorosos);
 
       jest.spyOn(cuotaRepository, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
@@ -613,7 +753,7 @@ describe('CobrosService', () => {
         busqueda: 'Perez',
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+      expect(mainQueryBuilder.andWhere).toHaveBeenCalledWith(
         '(socio.nombre LIKE :busqueda OR socio.apellido LIKE :busqueda OR socio.dni LIKE :busqueda)',
         { busqueda: '%Perez%' },
       );
@@ -632,13 +772,19 @@ describe('CobrosService', () => {
         },
       ];
 
-      const mockQueryBuilder = createMockQueryBuilder();
-      mockQueryBuilder.getMany.mockResolvedValueOnce(mockMorosos);
-      mockQueryBuilder.getCount.mockResolvedValueOnce(25);
-
-      jest
-        .spyOn(socioRepository, 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as unknown as any);
+      const mockTotalMorosos = Array.from({ length: 25 }, (_, i) => ({
+        id: i + 1,
+        nombre: 'Juan',
+        apellido: 'Perez',
+        dni: `1000000${i}`,
+        estado: 'ACTIVO',
+        categoria: { id: 1, nombre: 'General', montoMensual: 5000 },
+      }));
+      const { mainQueryBuilder } = setupSocioQueryBuilders(
+        mockMorosos,
+        mockTotalMorosos,
+        mockTotalMorosos,
+      );
 
       jest.spyOn(cuotaRepository, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
@@ -672,8 +818,8 @@ describe('CobrosService', () => {
         limit: 10,
       });
 
-      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(10);
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
+      expect(mainQueryBuilder.skip).toHaveBeenCalledWith(10);
+      expect(mainQueryBuilder.take).toHaveBeenCalledWith(10);
       expect(result.page).toBe(2);
       expect(result.limit).toBe(10);
       expect(result.totalPages).toBe(3);
@@ -691,13 +837,7 @@ describe('CobrosService', () => {
         },
       ];
 
-      const mockQueryBuilder = createMockQueryBuilder();
-      mockQueryBuilder.getMany.mockResolvedValueOnce(mockMorosos);
-      mockQueryBuilder.getCount.mockResolvedValueOnce(1);
-
-      jest
-        .spyOn(socioRepository, 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as unknown as any);
+      setupSocioQueryBuilders(mockMorosos);
 
       jest.spyOn(cuotaRepository, 'createQueryBuilder').mockReturnValue({
         where: jest.fn().mockReturnThis(),
@@ -734,7 +874,8 @@ describe('CobrosService', () => {
               periodo: '2025-12',
               fechaPago: new Date('2025-12-15'),
             },
-          ]),
+          ])
+          .mockResolvedValueOnce([]),
       } as unknown as any);
 
       const result = await service.getMorososDetallados({});
@@ -745,6 +886,143 @@ describe('CobrosService', () => {
         '2026-02',
         '2026-03',
       ]);
+    });
+  });
+
+  describe('registrarOperacionCobro', () => {
+    it('debería rechazar cobro mobile si actor COBRADOR no envía cobradorId', async () => {
+      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockQueryRunner.manager.find.mockResolvedValue([
+        {
+          id: 10,
+          socioId: 1,
+          monto: 1000,
+          estado: EstadoCuota.PENDIENTE,
+          createdAt: new Date(),
+        },
+      ]);
+
+      await expect(
+        service.registrarOperacionCobro({
+          socioId: 1,
+          cuotaIds: [10],
+          metodoPagoId: 1,
+          actorCobro: 'COBRADOR' as never,
+          origenCobro: 'MOBILE' as never,
+          total: 1000,
+        }),
+      ).rejects.toThrow(CustomError);
+    });
+
+    it('debería rechazar cobro web si actor COBRADOR no envía cobradorId', async () => {
+      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockQueryRunner.manager.find.mockResolvedValue([
+        {
+          id: 10,
+          socioId: 1,
+          monto: 1000,
+          estado: EstadoCuota.PENDIENTE,
+          createdAt: new Date(),
+        },
+      ]);
+
+      await expect(
+        service.registrarOperacionCobro({
+          socioId: 1,
+          cuotaIds: [10],
+          metodoPagoId: 1,
+          actorCobro: 'COBRADOR' as never,
+          origenCobro: 'WEB' as never,
+          total: 1000,
+        }),
+      ).rejects.toThrow(CustomError);
+    });
+
+    it('debería rechazar si el total informado no coincide', async () => {
+      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockQueryRunner.manager.find.mockResolvedValue([
+        {
+          id: 10,
+          socioId: 1,
+          monto: 1000,
+          estado: EstadoCuota.PENDIENTE,
+          createdAt: new Date(),
+        },
+      ]);
+
+      await expect(
+        service.registrarOperacionCobro({
+          socioId: 1,
+          cuotaIds: [10],
+          metodoPagoId: 1,
+          actorCobro: 'OPERADOR' as never,
+          origenCobro: 'WEB' as never,
+          total: 999,
+        }),
+      ).rejects.toThrow(CustomError);
+    });
+
+    it('debería devolver operación existente ante misma idempotencyKey', async () => {
+      const existente = { id: 99, idempotencyKey: 'idempotent-1', lineas: [] };
+      mockQueryRunner.manager.findOne.mockResolvedValue(existente);
+
+      const result = await service.registrarOperacionCobro({
+        socioId: 1,
+        cuotaIds: [10],
+        metodoPagoId: 1,
+        actorCobro: 'OPERADOR' as never,
+        origenCobro: 'WEB' as never,
+        total: 1000,
+        idempotencyKey: 'idempotent-1',
+      });
+
+      expect(result).toBe(existente);
+      expect(mockQueryRunner.manager.find).not.toHaveBeenCalled();
+    });
+
+    it('debería generar movimiento de comisión para cobrador al registrar operación', async () => {
+      const fechaOperacion = new Date('2026-03-06T10:00:00.000Z');
+
+      mockQueryRunner.manager.create.mockImplementation(
+        (_entity: unknown, payload: Record<string, unknown>) => payload,
+      );
+
+      mockQueryRunner.manager.find.mockResolvedValueOnce([
+        {
+          cobradorId: 1,
+          porcentaje: 0.1,
+          vigenteDesde: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ]);
+
+      mockQueryRunner.manager.save
+        .mockResolvedValueOnce({ id: 77, fechaHoraServidor: fechaOperacion })
+        .mockResolvedValueOnce({ id: 501 })
+        .mockResolvedValueOnce([{ id: 901 }]);
+
+      mockQueryRunner.manager.findOne.mockResolvedValueOnce({
+        id: 77,
+        lineas: [{ id: 901 }],
+      });
+
+      await service.registrarOperacionCobro({
+        socioId: 1,
+        conceptos: [{ concepto: 'Pago manual', monto: 1000 }],
+        metodoPagoId: 1,
+        actorCobro: 'COBRADOR' as never,
+        origenCobro: 'WEB' as never,
+        cobradorId: 1,
+        total: 1000,
+      });
+
+      expect(mockQueryRunner.manager.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cobradorId: 1,
+          tipoMovimiento: 'COMISION_GENERADA',
+          monto: 100,
+          cobroOperacionId: 77,
+        }),
+      );
     });
   });
 });

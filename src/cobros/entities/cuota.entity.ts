@@ -40,8 +40,12 @@ export class Cuota {
   @Index()
   estado!: EstadoCuota;
 
-  @Column({ length: 50, name: 'barcode', unique: true, nullable: true })
-  barcode?: string;
+  @Column({
+    type: 'boolean',
+    name: 'rechazada_tarjeta_centro',
+    default: false,
+  })
+  rechazadaTarjetaCentro!: boolean;
 
   @CreateDateColumn({
     type: 'timestamp',

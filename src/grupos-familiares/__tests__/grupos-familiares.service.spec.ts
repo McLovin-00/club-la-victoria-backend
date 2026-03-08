@@ -92,8 +92,12 @@ describe('GruposFamiliaresService', () => {
       };
 
       jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(null);
-      jest.spyOn(grupoRepository, 'create').mockReturnValue(mockGrupo as GrupoFamiliar);
-      jest.spyOn(grupoRepository, 'save').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'create')
+        .mockReturnValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'save')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
 
       const result = await service.create(dto);
 
@@ -114,7 +118,9 @@ describe('GruposFamiliaresService', () => {
         orden: 0,
       };
 
-      jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(existingGroup as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'findOne')
+        .mockResolvedValue(existingGroup as GrupoFamiliar);
 
       await expect(service.create(dto)).rejects.toThrow(CustomError);
     });
@@ -131,8 +137,12 @@ describe('GruposFamiliaresService', () => {
       };
 
       jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(null);
-      jest.spyOn(grupoRepository, 'create').mockReturnValue(mockGrupo as GrupoFamiliar);
-      jest.spyOn(grupoRepository, 'save').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'create')
+        .mockReturnValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'save')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
 
       const result = await service.create(dto);
 
@@ -147,10 +157,7 @@ describe('GruposFamiliaresService', () => {
         { id: 2, nombre: 'Familia López', orden: 2 },
       ];
 
-      const mockRaw = [
-        { cantidadSocios: '3' },
-        { cantidadSocios: '2' },
-      ];
+      const mockRaw = [{ cantidadSocios: '3' }, { cantidadSocios: '2' }];
 
       const mockQueryBuilder = {
         leftJoin: jest.fn().mockReturnThis(),
@@ -164,7 +171,9 @@ describe('GruposFamiliaresService', () => {
         }),
       };
 
-      jest.spyOn(grupoRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(grupoRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       const result = await service.findAll();
 
@@ -186,7 +195,9 @@ describe('GruposFamiliaresService', () => {
         }),
       };
 
-      jest.spyOn(grupoRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(grupoRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       const result = await service.findAll();
 
@@ -206,7 +217,9 @@ describe('GruposFamiliaresService', () => {
         ],
       };
 
-      jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'findOne')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
 
       const result = await service.findOne(1);
 
@@ -240,10 +253,11 @@ describe('GruposFamiliaresService', () => {
 
       // Primera llamada: obtener el grupo existente
       // Segunda llamada: verificar que no existe grupo con el nuevo nombre (null)
-      jest.spyOn(grupoRepository, 'findOne')
+      jest
+        .spyOn(grupoRepository, 'findOne')
         .mockResolvedValueOnce(mockGrupo as GrupoFamiliar)
         .mockResolvedValueOnce(null);
-      
+
       jest.spyOn(grupoRepository, 'save').mockResolvedValue({
         ...mockGrupo,
         ...dto,
@@ -272,7 +286,8 @@ describe('GruposFamiliaresService', () => {
         nombre: 'Familia López',
       };
 
-      jest.spyOn(grupoRepository, 'findOne')
+      jest
+        .spyOn(grupoRepository, 'findOne')
         .mockResolvedValueOnce(mockGrupo as GrupoFamiliar)
         .mockResolvedValueOnce(existingGroup as GrupoFamiliar);
 
@@ -291,7 +306,9 @@ describe('GruposFamiliaresService', () => {
         descripcion: 'Nueva descripción',
       };
 
-      jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'findOne')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
       jest.spyOn(grupoRepository, 'save').mockResolvedValue({
         ...mockGrupo,
         descripcion: dto.descripcion,
@@ -312,7 +329,9 @@ describe('GruposFamiliaresService', () => {
         orden: 1,
       };
 
-      jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'findOne')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
       mockQueryRunner.manager.update.mockResolvedValue({ affected: 2 });
       mockQueryRunner.manager.remove.mockResolvedValue(mockGrupo);
 
@@ -334,7 +353,9 @@ describe('GruposFamiliaresService', () => {
         orden: 1,
       };
 
-      jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'findOne')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
       mockQueryRunner.manager.update.mockRejectedValue(new Error('DB Error'));
 
       await expect(service.remove(1)).rejects.toThrow(CustomError);
@@ -360,10 +381,14 @@ describe('GruposFamiliaresService', () => {
 
       const dto = { socioIds: [1, 2] };
 
-      jest.spyOn(grupoRepository, 'findOne')
+      jest
+        .spyOn(grupoRepository, 'findOne')
         .mockResolvedValueOnce(mockGrupo as GrupoFamiliar)
-        .mockResolvedValueOnce({ ...mockGrupo, socios: mockSocios } as GrupoFamiliar);
-      
+        .mockResolvedValueOnce({
+          ...mockGrupo,
+          socios: mockSocios,
+        } as GrupoFamiliar);
+
       mockQueryRunner.manager.find.mockResolvedValue(mockSocios);
       mockQueryRunner.manager.update.mockResolvedValue({ affected: 2 });
 
@@ -384,7 +409,9 @@ describe('GruposFamiliaresService', () => {
 
       const dto = { socioIds: [1, 999] }; // 999 no existe
 
-      jest.spyOn(grupoRepository, 'findOne').mockResolvedValue(mockGrupo as GrupoFamiliar);
+      jest
+        .spyOn(grupoRepository, 'findOne')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
       mockQueryRunner.manager.find.mockResolvedValue(mockSocios);
 
       await expect(service.asignarSocios(1, dto)).rejects.toThrow(CustomError);
@@ -401,7 +428,9 @@ describe('GruposFamiliaresService', () => {
         grupoFamiliar: { id: 1, nombre: 'Familia García' },
       };
 
-      jest.spyOn(socioRepository, 'findOne').mockResolvedValue(mockSocio as Socio);
+      jest
+        .spyOn(socioRepository, 'findOne')
+        .mockResolvedValue(mockSocio as Socio);
       jest.spyOn(socioRepository, 'save').mockResolvedValue({
         ...mockSocio,
         grupoFamiliar: undefined,
@@ -422,8 +451,20 @@ describe('GruposFamiliaresService', () => {
   describe('findSociosSinGrupo', () => {
     it('debería retornar socios sin grupo ordenados alfabéticamente', async () => {
       const mockSocios = [
-        { id: 1, nombre: 'Juan', apellido: 'García', dni: '12345678', telefono: '1234' },
-        { id: 2, nombre: 'María', apellido: 'López', dni: '87654321', telefono: '5678' },
+        {
+          id: 1,
+          nombre: 'Juan',
+          apellido: 'García',
+          dni: '12345678',
+          telefono: '1234',
+        },
+        {
+          id: 2,
+          nombre: 'María',
+          apellido: 'López',
+          dni: '87654321',
+          telefono: '5678',
+        },
       ];
 
       const mockQueryBuilder = {
@@ -433,7 +474,9 @@ describe('GruposFamiliaresService', () => {
         getMany: jest.fn().mockResolvedValue(mockSocios),
       };
 
-      jest.spyOn(socioRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(socioRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       const result = await service.findSociosSinGrupo();
 
@@ -450,7 +493,9 @@ describe('GruposFamiliaresService', () => {
         getMany: jest.fn().mockResolvedValue([]),
       };
 
-      jest.spyOn(socioRepository, 'createQueryBuilder').mockReturnValue(mockQueryBuilder as any);
+      jest
+        .spyOn(socioRepository, 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
 
       const result = await service.findSociosSinGrupo();
 

@@ -14,10 +14,14 @@ import {
   GenerarCuotasDto,
   RegistrarPagoDto,
   RegistrarPagoMultipleDto,
+  RegistrarOperacionCobroDto,
+  RegistrarPagoCuotasSeleccionadasDto,
+  ReciboMultipleCuotasDto,
   ReporteCobranzaQueryDto,
   GenerarCuotasSeleccionDto,
   EstadoPagosQueryDto,
   CuotasQueryDto,
+  ProcesarResultadosTarjetaCentroDto,
   // Morosos detallados
   MorososQueryDto,
   TarjetaCentroArchivoQueryDto,
@@ -76,18 +80,15 @@ export class CobrosController {
   @Post('pagos')
   @Private()
   @ApiOperation({
-    summary: 'Registrar pago de cuota por barcode',
+    summary: 'Registrar pago de cuota por ID',
     description:
-      'Registra el pago de una cuota usando el código de barras (formato CUOTA-{id}). Valida que la cuota exista y no esté ya pagada.',
+      'Registra el pago de una cuota usando su ID. Valida que la cuota exista y no esté ya pagada.',
   })
   @ApiResponse({
     status: 201,
     description: 'Pago registrado exitosamente',
   })
-  @ApiResponse({
-    status: 400,
-    description: 'Formato de barcode inválido',
-  })
+  @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
   @ApiResponse({
     status: 404,
     description: 'Cuota no encontrada',
@@ -114,13 +115,50 @@ export class CobrosController {
     schema: {
       example: {
         pagosExitosos: 3,
-        errores: ['CUOTA-125: cuota ya pagada'],
+        errores: ['123: cuota ya pagada'],
       },
     },
   })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   registrarPagoMultiple(@Body() dto: RegistrarPagoMultipleDto) {
     return this.cobrosService.registrarPagoMultiple(dto);
+  }
+
+  @Post('pagos/operacion')
+  @ApiOperation({
+    summary: 'Registrar operación de cobro multi-línea',
+    description:
+      'Registra una operación con cuotas y conceptos no-cuota, persistiendo actor, origen, total y trazabilidad de líneas.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Operación registrada exitosamente',
+  })
+  registrarOperacionCobro(@Body() dto: RegistrarOperacionCobroDto) {
+    return this.cobrosService.registrarOperacionCobro(dto);
+  }
+
+  @Post('pagos/cuotas-seleccion')
+  @Private()
+  @ApiOperation({
+    summary: 'Registrar pago de cuotas seleccionadas de un socio',
+    description:
+      'Permite pagar dos o mas cuotas seleccionadas del mismo socio, distribuyendo el total en uno o dos metodos de pago.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Pago de cuotas seleccionadas registrado exitosamente',
+  })
+  @ApiResponse({ status: 400, description: 'Datos de pago inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 409,
+    description: 'Una o mas cuotas ya están pagadas',
+  })
+  registrarPagoCuotasSeleccionadas(
+    @Body() dto: RegistrarPagoCuotasSeleccionadasDto,
+  ) {
+    return this.cobrosService.registrarPagoCuotasSeleccionadas(dto);
   }
 
   // ==================== CUENTAS CORRIENTES ====================
@@ -138,8 +176,12 @@ export class CobrosController {
   })
   @ApiResponse({ status: 404, description: 'Socio no encontrado' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  obtenerCuentaCorriente(@Param('socioId', ParseIntPipe) socioId: number) {
-    return this.cobrosService.obtenerCuentaCorriente(socioId);
+  obtenerCuentaCorriente(
+    @Param('socioId', ParseIntPipe) socioId: number,
+    @Query('anio') anioRaw?: string,
+  ) {
+    const anio = anioRaw ? Number.parseInt(anioRaw, 10) : undefined;
+    return this.cobrosService.obtenerCuentaCorriente(socioId, anio);
   }
 
   // ==================== REPORTES ====================
@@ -247,15 +289,42 @@ export class CobrosController {
     },
   })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  findAllCuotas(@Query() query: CuotasQueryDto) {
+  findAllCuotas(
+    @Query() query: CuotasQueryDto,
+    @Query('tarjetaCentro') tarjetaCentroRaw?: string,
+  ) {
+    const tarjetaCentro = this.parseTarjetaCentroQueryParam(tarjetaCentroRaw);
+
     return this.cobrosService.findAllCuotas({
       periodo: query.periodo,
       estado: query.estado as EstadoCuota,
       socioId: query.socioId,
+      tarjetaCentro,
       busqueda: query.busqueda,
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  private parseTarjetaCentroQueryParam(value: unknown): boolean | undefined {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+
+    return undefined;
   }
 
   // ==================== SOCIOS ELEGIBLES ====================
@@ -415,32 +484,81 @@ export class CobrosController {
   })
   @ApiResponse({
     status: 404,
-    description: 'No hay cuotas pendientes con tarjeta del centro para el período',
+    description:
+      'No hay cuotas pendientes con tarjeta del centro para el período',
   })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   async descargarArchivoTarjetaCentro(
     @Query() query: TarjetaCentroArchivoQueryDto,
     @Res() res: Response,
   ) {
-    const cuotas = await this.cobrosService.obtenerCuotasTarjetaCentro(query.periodo);
+    const cuotas = await this.cobrosService.obtenerCuotasTarjetaCentro(
+      query.periodo,
+    );
 
     if (cuotas.length === 0) {
-      res
-        .status(404)
-        .json({
-          message:
-            'No hay cuotas pendientes para socios con tarjeta del centro en el período indicado',
-        });
+      res.status(404).json({
+        message:
+          'No hay cuotas pendientes para socios con tarjeta del centro en el período indicado',
+      });
       return;
     }
 
-    const archivo = this.tarjetaCentro23fService.generarArchivo(query.periodo, cuotas);
+    const archivo = this.tarjetaCentro23fService.generarArchivo(
+      query.periodo,
+      cuotas,
+    );
     res.setHeader('Content-Type', 'text/plain; charset=ascii');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${archivo.fileName}"`,
     );
     res.send(Buffer.from(archivo.content, 'ascii'));
+  }
+
+  @Post('tarjeta-centro/resultados')
+  @Private()
+  @ApiOperation({
+    summary: 'Procesar resultados de Tarjeta del Centro',
+    description:
+      'Permite marcar cuotas de socios con tarjeta del centro como aprobadas o rechazadas. Si se aprueba, la cuota queda PAGADA. Si se rechaza, la cuota permanece PENDIENTE.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Resultados de tarjeta del centro procesados exitosamente',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  procesarResultadosTarjetaCentro(
+    @Body() dto: ProcesarResultadosTarjetaCentroDto,
+  ) {
+    return this.cobrosService.procesarResultadosTarjetaCentro(dto);
+  }
+
+  @Post('recibo/multiple/html')
+  @Private()
+  @ApiOperation({
+    summary: 'Generar HTML de recibo para múltiples cuotas seleccionadas',
+    description:
+      'Genera un recibo consolidado en HTML para las cuotas seleccionadas de un socio.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Recibo múltiple generado exitosamente',
+  })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 404, description: 'Cuotas no encontradas' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async generarReciboMultipleHtml(
+    @Body() dto: ReciboMultipleCuotasDto,
+    @Res() res: Response,
+  ) {
+    const cuotas =
+      await this.cobrosService.obtenerCuotasParaReciboMultiple(dto);
+    const html =
+      await this.talonarioPdfService.generarHtmlReciboMultiple(cuotas);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
   }
 
   @Get('recibo/html')
@@ -488,15 +606,57 @@ export class CobrosController {
     );
 
     if (!cuota) {
-      res
-        .status(404)
-        .json({ message: 'No existe cuota para el socio en el periodo indicado' });
+      res.status(404).json({
+        message: 'No existe cuota para el socio en el periodo indicado',
+      });
       return;
     }
 
-    const html = await this.talonarioPdfService.generarHtmlReciboIndividual(cuota);
+    const html =
+      await this.talonarioPdfService.generarHtmlReciboIndividual(cuota);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
+  }
+
+  @Post('pagos/operacion-grupal')
+  @Private()
+  @ApiOperation({
+    summary: 'Registrar operación de cobro grupal familiar',
+    description:
+      'Registra una operación con cuotas y conceptos no-cuota para un grupo familiar, persistiendo actor, origen, total y trazabilidad de líneas.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Operación registrada exitosamente',
+    schema: {
+      example: [
+        {
+          id: 123,
+          socioId: 45,
+          periodo: '2026-03',
+          concepto: 'Cuota Mensual',
+          monto: 5000,
+          estado: 'PAGADO',
+        },
+        {
+          id: 124,
+          socioId: 46,
+          periodo: '2026-03',
+          concepto: 'Cuota Mensual',
+          monto: 5000,
+          estado: 'PAGADO',
+        },
+      ],
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Datos de entrada inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 409,
+    description: 'Una o más cuotas ya están pagadas',
+  })
+  registrarCobroGrupal(@Body() dto: import('./dto').RegistrarCobroGrupalDto) {
+    return this.cobrosService.registrarCobroGrupal(dto);
   }
 }

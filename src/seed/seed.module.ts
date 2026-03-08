@@ -10,8 +10,17 @@ import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.ent
 import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
 import { PagoCuota } from '../cobros/entities/pago-cuota.entity';
 import { Cuota } from '../cobros/entities/cuota.entity';
+import { MetodoPago } from '../metodos-pago/entities/metodo-pago.entity';
+import { CobroOperacion } from '../cobros/entities/cobro-operacion.entity';
+import { CobroOperacionLinea } from '../cobros/entities/cobro-operacion-linea.entity';
 import { AppConfigModule } from '../config/AppConfig/app-config.module';
 import { AppConfigService } from '../config/AppConfig/app-config.service';
+import {
+  Cobrador,
+  CobradorDispositivo,
+  CobradorComisionConfig,
+  CobradorCuentaCorrienteMovimiento,
+} from '../cobradores/entities';
 
 @Module({
   imports: [
@@ -37,8 +46,15 @@ import { AppConfigService } from '../config/AppConfig/app-config.service';
           Cuota,
           CategoriaSocio,
           PagoCuota,
+          Cobrador,
+          MetodoPago,
+          CobroOperacion,
+          CobroOperacionLinea,
+          CobradorDispositivo,
+          CobradorComisionConfig,
+          CobradorCuentaCorrienteMovimiento,
         ],
-        synchronize: false,
+        synchronize: configService.getNodeEnv() === 'development',
       }),
     }),
     TypeOrmModule.forFeature([
@@ -51,6 +67,8 @@ import { AppConfigService } from '../config/AppConfig/app-config.service';
       Cuota,
       CategoriaSocio,
       PagoCuota,
+      Cobrador,
+      MetodoPago,
     ]),
   ],
   providers: [SeedService],
