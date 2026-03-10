@@ -15,7 +15,7 @@ import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.ent
 import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
 import { Cuota, EstadoCuota } from '../cobros/entities/cuota.entity';
 import { PagoCuota } from '../cobros/entities/pago-cuota.entity';
-import { Cobrador } from '../cobradores/entities';
+import { Cobrador, CobradorComisionConfig } from '../cobradores/entities';
 import * as bcrypt from 'bcrypt';
 import { AUTH } from '../constants/auth.constants';
 
@@ -359,6 +359,8 @@ export class SeedService {
     private readonly pagoCuotaRepository: Repository<PagoCuota>,
     @InjectRepository(Cobrador)
     private readonly cobradorRepository: Repository<Cobrador>,
+    @InjectRepository(CobradorComisionConfig)
+    private readonly comisionConfigRepository: Repository<CobradorComisionConfig>,
     @InjectRepository(MetodoPagoEntity)
     private readonly metodoPagoRepository: Repository<MetodoPagoEntity>,
   ) {}
@@ -409,13 +411,44 @@ export class SeedService {
         where: { nombre },
       });
       if (!existe) {
-        await this.cobradorRepository.save(
-          this.cobradorRepository.create({
-            nombre,
-            activo: true,
-          }),
-        );
+        const cobrador = this.cobradorRepository.create({
+          nombre,
+          activo: true,
+        });
+        const cobradorGuardado = await this.cobradorRepository.save(cobrador);
         this.logger.log(`🧾 Cobrador "${nombre}" creado.`);
+
+        // Crear configuración de comisión por defecto (15%)
+        const comisionExistente = await this.comisionConfigRepository.findOne({
+          where: { cobradorId: cobradorGuardado.id },
+        });
+        if (!comisionExistente) {
+          const comisionConfig = this.comisionConfigRepository.create({
+            cobradorId: cobradorGuardado.id,
+            porcentaje: 0.15, // 15% en formato decimal
+            vigenteDesde: new Date(),
+          });
+          await this.comisionConfigRepository.save(comisionConfig);
+          this.logger.log(
+            `💰 Comisión por defecto (15%) asignada a "${nombre}".`,
+          );
+        }
+      } else {
+        // Verificar si el cobrador existente tiene comisión configurada
+        const comisionExistente = await this.comisionConfigRepository.findOne({
+          where: { cobradorId: existe.id },
+        });
+        if (!comisionExistente) {
+          const comisionConfig = this.comisionConfigRepository.create({
+            cobradorId: existe.id,
+            porcentaje: 0.15, // 15% en formato decimal
+            vigenteDesde: new Date(),
+          });
+          await this.comisionConfigRepository.save(comisionConfig);
+          this.logger.log(
+            `💰 Comisión por defecto (15%) asignada a "${nombre}" (cobrador existente).`,
+          );
+        }
       }
     }
   }

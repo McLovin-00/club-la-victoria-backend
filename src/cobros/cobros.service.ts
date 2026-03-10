@@ -65,6 +65,9 @@ export interface CuentaCorriente {
     periodo: string;
     monto: number;
     estado: EstadoCuota;
+    tarjetaCentroEstado: 'PENDIENTE_RESPUESTA' | 'APROBADA' | 'RECHAZADA' | 'NO_APLICA';
+    tarjetaCentroDetalle: string;
+    tarjetaCentroFechaEstado?: Date;
     fechaPago?: Date;
   }[];
   totalDeuda: number;
@@ -1222,6 +1225,7 @@ export class CobrosService {
         cuota.estado = EstadoCuota.PAGADA;
         cuota.fechaPago = fechaPago;
         cuota.rechazadaTarjetaCentro = false;
+        cuota.fechaRechazoTarjetaCentro = null;
         await queryRunner.manager.save(cuota);
       }
 
@@ -1439,6 +1443,7 @@ export class CobrosService {
     cuota.estado = EstadoCuota.PAGADA;
     cuota.fechaPago = fechaPago;
     cuota.rechazadaTarjetaCentro = false;
+    cuota.fechaRechazoTarjetaCentro = null;
     await queryRunner.manager.save(cuota);
     return true;
   }
@@ -1452,6 +1457,7 @@ export class CobrosService {
     }
 
     cuota.rechazadaTarjetaCentro = true;
+    cuota.fechaRechazoTarjetaCentro = new Date();
     await queryRunner.manager.save(cuota);
     return true;
   }
@@ -1499,6 +1505,40 @@ export class CobrosService {
       (c) => c.estado === EstadoCuota.PENDIENTE,
     ).length;
 
+    const resolverEstadoTarjetaCentro = (cuota: Cuota) => {
+      if (!socio.tarjetaCentro) {
+        return {
+          tarjetaCentroEstado: 'NO_APLICA' as const,
+          tarjetaCentroDetalle: 'Socio sin Tarjeta del Centro',
+          tarjetaCentroFechaEstado: undefined,
+        };
+      }
+
+      if (cuota.rechazadaTarjetaCentro) {
+        return {
+          tarjetaCentroEstado: 'RECHAZADA' as const,
+          tarjetaCentroDetalle:
+            'Tarjeta rechazada. Esta cuota debe abonarla el socio.',
+          tarjetaCentroFechaEstado: cuota.fechaRechazoTarjetaCentro ?? undefined,
+        };
+      }
+
+      if (cuota.estado === EstadoCuota.PAGADA) {
+        return {
+          tarjetaCentroEstado: 'APROBADA' as const,
+          tarjetaCentroDetalle: 'Tarjeta aprobada. Cuota cubierta por convenio.',
+          tarjetaCentroFechaEstado: cuota.fechaPago,
+        };
+      }
+
+      return {
+        tarjetaCentroEstado: 'PENDIENTE_RESPUESTA' as const,
+        tarjetaCentroDetalle:
+          'Enviada a Tarjeta del Centro. Pendiente de respuesta.',
+        tarjetaCentroFechaEstado: cuota.createdAt,
+      };
+    };
+
     return {
       socioId: socio.id,
       socioNombre: socio.nombre,
@@ -1508,6 +1548,7 @@ export class CobrosService {
         periodo: c.periodo,
         monto: Number(c.monto),
         estado: c.estado,
+        ...resolverEstadoTarjetaCentro(c),
         fechaPago: c.fechaPago,
       })),
       totalDeuda,

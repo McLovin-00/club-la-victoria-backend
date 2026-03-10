@@ -47,6 +47,13 @@ export class Cuota {
   })
   rechazadaTarjetaCentro!: boolean;
 
+  @Column({
+    type: 'timestamp',
+    name: 'fecha_rechazo_tarjeta_centro',
+    nullable: true,
+  })
+  fechaRechazoTarjetaCentro?: Date | null;
+
   @CreateDateColumn({
     type: 'timestamp',
     name: 'created_at',

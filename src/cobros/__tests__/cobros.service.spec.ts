@@ -418,7 +418,10 @@ describe('CobrosService', () => {
         id: 1,
         nombre: 'Juan',
         apellido: 'Pérez',
+        tarjetaCentro: true,
       };
+
+      const fechaRechazo = new Date('2026-02-15T10:30:00.000Z');
 
       const mockCuotas = [
         {
@@ -427,12 +430,15 @@ describe('CobrosService', () => {
           monto: 5000,
           estado: EstadoCuota.PAGADA,
           fechaPago: new Date(),
+          rechazadaTarjetaCentro: false,
         },
         {
           id: 2,
           periodo: '2026-02',
           monto: 5000,
           estado: EstadoCuota.PENDIENTE,
+          rechazadaTarjetaCentro: true,
+          fechaRechazoTarjetaCentro: fechaRechazo,
         },
       ];
 
@@ -458,6 +464,9 @@ describe('CobrosService', () => {
       expect(result.totalDeuda).toBe(5000);
       expect(result.totalPagado).toBe(5000);
       expect(result.mesesAdeudados).toBe(1);
+      expect(result.cuotas[0].tarjetaCentroEstado).toBe('APROBADA');
+      expect(result.cuotas[1].tarjetaCentroEstado).toBe('RECHAZADA');
+      expect(result.cuotas[1].tarjetaCentroFechaEstado).toEqual(fechaRechazo);
     });
 
     it('debería lanzar error si el socio no existe', async () => {

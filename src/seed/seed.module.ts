@@ -68,6 +68,7 @@ import {
       CategoriaSocio,
       PagoCuota,
       Cobrador,
+      CobradorComisionConfig,
       MetodoPago,
     ]),
   ],

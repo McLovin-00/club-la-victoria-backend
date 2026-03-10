@@ -199,6 +199,7 @@ export class CobradoresService {
       relations: [
         'cobroOperacion',
         'cobroOperacion.socio',
+        'cobroOperacion.metodoPago',
         'cobroOperacion.lineas',
         'cobroOperacion.lineas.cuota',
       ],
@@ -223,6 +224,10 @@ export class CobradoresService {
           (linea) => linea.tipoLinea === TipoLineaCobro.CUOTA,
         );
 
+        const lineasConcepto = (movimiento.cobroOperacion?.lineas ?? []).filter(
+          (linea) => linea.tipoLinea === TipoLineaCobro.CONCEPTO,
+        );
+
         const detalleCobro = movimiento.cobroOperacion
           ? {
               fechaHoraCobro: movimiento.cobroOperacion.fechaHoraServidor,
@@ -238,6 +243,17 @@ export class CobradoresService {
                 periodo: linea.cuota?.periodo,
                 monto: Number(linea.monto),
               })),
+              conceptos: lineasConcepto.map((linea) => ({
+                concepto: linea.concepto,
+                descripcion: linea.descripcion,
+                monto: Number(linea.monto),
+              })),
+              metodoPago: movimiento.cobroOperacion.metodoPago
+                ? {
+                    id: movimiento.cobroOperacion.metodoPago.id,
+                    nombre: movimiento.cobroOperacion.metodoPago.nombre,
+                  }
+                : undefined,
             }
           : undefined;
 
