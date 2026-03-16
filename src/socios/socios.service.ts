@@ -188,6 +188,10 @@ export class SociosService {
       const { fotoUrl, eliminarFotoVieja, categoriaId, ...rest } = dto;
       Object.assign(socio, rest);
 
+      if (socio.tarjetaCentro === false) {
+        socio.numeroTarjetaCentro = undefined;
+      }
+
       // Mapear categoriaId a la relación categoria si overrideManual es true
       if (dto.overrideManual && categoriaId) {
         socio.categoria = { id: categoriaId } as any;
@@ -324,7 +328,7 @@ export class SociosService {
     words.forEach((word, index) => {
       const paramName = `word${index}`;
       qb.andWhere(
-        `(LOWER(socio.nombre) LIKE :${paramName} OR LOWER(socio.apellido) LIKE :${paramName})`,
+        `(unaccent(socio.nombre) ILIKE unaccent(:${paramName}) OR unaccent(socio.apellido) ILIKE unaccent(:${paramName}))`,
         { [paramName]: `%${word}%` },
       );
     });

@@ -6,10 +6,19 @@ import {
   IsBoolean,
   IsNumber,
   IsInt,
+  IsNotEmpty,
+  Matches,
+  ValidateIf,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Estado, Genero } from './create-socio.dto';
+import {
+  Estado,
+  Genero,
+  NUMERO_TARJETA_CENTRO_ERROR,
+  NUMERO_TARJETA_CENTRO_REGEX,
+  normalizarNumeroTarjetaCentro,
+} from './create-socio.dto';
 
 export class UpdateSocioDto {
   @IsString()
@@ -131,9 +140,19 @@ export class UpdateSocioDto {
 
   @ApiPropertyOptional({
     description: 'Número de tarjeta del centro (solo si tarjetaCentro es true)',
-    example: 'TC-12345',
+    example: '5400000012345678',
   })
+  @Transform(({ value }) => normalizarNumeroTarjetaCentro(value), {
+    toClassOnly: true,
+  })
+  @ValidateIf(
+    (object: UpdateSocioDto) =>
+      object.tarjetaCentro === true || object.numeroTarjetaCentro !== undefined,
+  )
+  @IsNotEmpty({ message: NUMERO_TARJETA_CENTRO_ERROR })
   @IsString()
-  @IsOptional()
+  @Matches(NUMERO_TARJETA_CENTRO_REGEX, {
+    message: NUMERO_TARJETA_CENTRO_ERROR,
+  })
   numeroTarjetaCentro?: string;
 }

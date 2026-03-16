@@ -25,8 +25,8 @@ export class SocioRepository extends Repository<Socio> {
 
     if (search) {
       query.andWhere(
-        '(LOWER(socio.nombre) LIKE :search OR LOWER(socio.apellido) LIKE :search OR socio.dni LIKE :search OR LOWER(socio.email) LIKE :search)',
-        { search: `%${search.toLowerCase()}%` },
+        '(unaccent(socio.nombre) ILIKE unaccent(:search) OR unaccent(socio.apellido) ILIKE unaccent(:search) OR socio.dni ILIKE :search OR unaccent(socio.email) ILIKE unaccent(:search))',
+        { search: `%${search}%` },
       );
     }
 
@@ -63,6 +63,10 @@ export class SocioRepository extends Repository<Socio> {
     socio.genero = createSocioDto.genero;
     socio.estado = createSocioDto.estado;
     socio.direccion = createSocioDto.direccion;
+    socio.tarjetaCentro = createSocioDto.tarjetaCentro ?? false;
+    socio.numeroTarjetaCentro = createSocioDto.tarjetaCentro
+      ? createSocioDto.numeroTarjetaCentro
+      : undefined;
 
     // Handle photo fields if they exist
     if (createSocioDto.fotoUrl) {

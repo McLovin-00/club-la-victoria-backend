@@ -5,6 +5,9 @@ import {
   IsEnum,
   IsBoolean,
   IsInt,
+  IsNotEmpty,
+  Matches,
+  ValidateIf,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
@@ -19,6 +22,18 @@ export enum Estado {
   INACTIVO = 'INACTIVO',
   MOROSO = 'MOROSO',
 }
+
+export const NUMERO_TARJETA_CENTRO_REGEX = /^\d{16}$/;
+export const NUMERO_TARJETA_CENTRO_ERROR =
+  'El numero de tarjeta del centro debe tener exactamente 16 digitos.';
+
+export const normalizarNumeroTarjetaCentro = (value: unknown) => {
+  if (value === '' || value === null || value === undefined) return undefined;
+  if (typeof value !== 'string') return value;
+
+  const tarjetaNormalizada = value.replace(/\D/g, '');
+  return tarjetaNormalizada === '' ? undefined : tarjetaNormalizada;
+};
 
 export class CreateSocioDto {
   @ApiProperty({
@@ -170,10 +185,20 @@ export class CreateSocioDto {
 
   @ApiProperty({
     description: 'Número de tarjeta del centro (solo si tarjetaCentro es true)',
-    example: 'TC-12345',
+    example: '5400000012345678',
     required: false,
   })
+  @Transform(({ value }) => normalizarNumeroTarjetaCentro(value), {
+    toClassOnly: true,
+  })
+  @ValidateIf(
+    (object: CreateSocioDto) =>
+      object.tarjetaCentro === true || object.numeroTarjetaCentro !== undefined,
+  )
+  @IsNotEmpty({ message: NUMERO_TARJETA_CENTRO_ERROR })
   @IsString()
-  @IsOptional()
+  @Matches(NUMERO_TARJETA_CENTRO_REGEX, {
+    message: NUMERO_TARJETA_CENTRO_ERROR,
+  })
   numeroTarjetaCentro?: string;
 }
