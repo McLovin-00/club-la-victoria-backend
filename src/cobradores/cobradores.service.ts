@@ -369,8 +369,8 @@ export class CobradoresService {
       .addGroupBy('grupoFamiliar.nombre')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
-      .skip(offset)
-      .take(limit);
+      .offset(offset)
+      .limit(limit);
 
     if (search) {
       qb.andWhere(
