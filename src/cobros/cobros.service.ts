@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, Brackets } from 'typeorm';
+import {
+  Repository,
+  DataSource,
+  In,
+  Brackets,
+  QueryFailedError,
+} from 'typeorm';
 import { Cuota, EstadoCuota } from './entities/cuota.entity';
 import { PagoCuota } from './entities/pago-cuota.entity';
 import {
@@ -75,6 +81,20 @@ export interface CuentaCorriente {
   mesesAdeudados: number;
 }
 
+export interface DesglosePorMetodoPago {
+  metodoPago: string;
+  totalCobrado: number;
+  cantidadPagos: number;
+}
+
+export interface ResumenTarjetaCentro {
+  sociosConTarjeta: number;
+  cuotasPagadasTarjeta: number;
+  totalCobradoTarjeta: number;
+  cuotasPendientesTarjeta: number;
+  totalPendienteTarjeta: number;
+}
+
 export interface ReporteCobranza {
   periodo: string;
   totalGenerado: number;
@@ -83,6 +103,8 @@ export interface ReporteCobranza {
   cuotasPendientes: number;
   cuotasPagadas: number;
   morosidad: number;
+  desglosePorMetodoPago: DesglosePorMetodoPago[];
+  tarjetaCentro: ResumenTarjetaCentro;
 }
 
 export interface ResultadoProcesamientoTarjetaCentro {
@@ -97,6 +119,12 @@ export interface ResultadoPagoCuotasSeleccionadas {
   pagosGenerados: number;
   totalPagado: number;
 }
+
+export type EstadoTarjetaCentroMes =
+  | 'TARJETA_APROBADA'
+  | 'TARJETA_RECHAZADA_PENDIENTE'
+  | 'TARJETA_RECHAZADA_PAGADA'
+  | 'TARJETA_PENDIENTE_RESPUESTA';
 
 @Injectable()
 export class CobrosService {
@@ -140,42 +168,7 @@ export class CobrosService {
     };
 
     try {
-      // 1. Fase 1: Advertencia para socios con EXACTAMENTE 3 cuotas pendientes
-      const sociosConAdvertencia =
-        await this.identificarSociosConAdvertenciaMorosidad(queryRunner);
-
-      for (const socio of sociosConAdvertencia) {
-        resultado.advertenciasMorosidad++;
-        resultado.advertencias.push(
-          `Socio ${socio.nombre} ${socio.apellido} (ID: ${socio.id}) adeuda 3 meses. Proximo mes sera inhabilitado.`,
-        );
-        await this.notificacionesService.crearNotificacion(
-          TipoNotificacion.MOROSIDAD_3_MESES,
-          socio.id,
-          `Socio ${socio.nombre} ${socio.apellido} adeuda 3 meses. El proximo mes sera inhabilitado.`,
-        );
-      }
-
-      // 2. Fase 2: Inhabilitacion para socios con 4+ cuotas pendientes
-      const sociosMorosos = await this.identificarSociosMorosos(queryRunner);
-
-      for (const socio of sociosMorosos) {
-        await queryRunner.manager.update(Socio, socio.id, {
-          estado: 'MOROSO',
-        });
-        resultado.inhabilitados++;
-        resultado.desactivados++;
-        resultado.advertencias.push(
-          `Socio ${socio.nombre} ${socio.apellido} (ID: ${socio.id}) marcado como MOROSO por morosidad (4+ meses)`,
-        );
-        await this.notificacionesService.crearNotificacion(
-          TipoNotificacion.INHABILITACION_AUTOMATICA,
-          socio.id,
-          `Socio ${socio.nombre} ${socio.apellido} marcado automaticamente como MOROSO por morosidad.`,
-        );
-      }
-
-      // 3. Obtener socios activos con categoria asignada
+      // 1. Obtener socios activos con categoria asignada (se ejecuta antes de crear nuevas cuotas)
       const sociosActivos = await queryRunner.manager.find(Socio, {
         where: { estado: 'ACTIVO' },
         relations: ['categoria'],
@@ -195,7 +188,8 @@ export class CobrosService {
           `${sociosExentos.length} socio(s) con categoria exenta (VITALICIO/HONORARIO) omitidos`,
         );
       }
-      // 4. Verificar cuotas existentes para el periodo (idempotencia)
+
+      // 2. Verificar cuotas existentes para el periodo (idempotencia)
       const cuotasExistentes = await queryRunner.manager.find(Cuota, {
         where: { periodo: dto.periodo },
       });
@@ -204,7 +198,7 @@ export class CobrosService {
         cuotasExistentes.map((c) => c.socioId),
       );
 
-      // 5. Crear cuotas para socios sin cuota en el periodo
+      // 3. Crear cuotas para socios sin cuota en el periodo
       for (const socio of sociosConCategoria) {
         if (sociosConCuotaExistente.has(socio.id)) {
           resultado.omitidas++;
@@ -222,6 +216,42 @@ export class CobrosService {
         resultado.creadas++;
       }
 
+      // 4. Fase 1: Inhabilitacion para socios con 4+ cuotas pendientes (despues de crear la nueva cuota)
+      // Esto asegura que detectamos cuando un socio llega a 4 cuotas pendientes
+      const sociosMorosos = await this.identificarSociosMorosos(queryRunner);
+
+      for (const socio of sociosMorosos) {
+        await queryRunner.manager.update(Socio, socio.id, {
+          estado: 'MOROSO',
+        });
+        resultado.inhabilitados++;
+        resultado.desactivados++;
+        resultado.advertencias.push(
+          `Socio ${socio.nombre} ${socio.apellido} (ID: ${socio.id}) marcado como MOROSO por morosidad (4+ meses)`,
+        );
+        await this.notificacionesService.crearNotificacion(
+          TipoNotificacion.INHABILITACION_AUTOMATICA,
+          socio.id,
+          `Socio ${socio.nombre} ${socio.apellido} marcado automaticamente como MOROSO por morosidad.`,
+        );
+      }
+
+      // 5. Fase 2: Advertencia para socios con EXACTAMENTE 3 cuotas pendientes
+      // Esto asegura que enviamos la notificacion cuando tienen exactamente 3 cuotas pendientes
+      const sociosConAdvertencia =
+        await this.identificarSociosConAdvertenciaMorosidad(queryRunner);
+
+      for (const socio of sociosConAdvertencia) {
+        resultado.advertenciasMorosidad++;
+        resultado.advertencias.push(
+          `Socio ${socio.nombre} ${socio.apellido} (ID: ${socio.id}) adeuda 3 meses. Proximo mes sera inhabilitado.`,
+        );
+        await this.notificacionesService.crearNotificacion(
+          TipoNotificacion.MOROSIDAD_3_MESES,
+          socio.id,
+          `Socio ${socio.nombre} ${socio.apellido} adeuda 3 meses. El proximo mes sera inhabilitado.`,
+        );
+      }
       await queryRunner.commitTransaction();
       return resultado;
     } catch (error) {
@@ -241,6 +271,32 @@ export class CobrosService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  private resolverEstadoTarjetaCentroMes(
+    tieneTarjetaCentro: boolean,
+    cuota?: {
+      estado: EstadoCuota;
+      rechazadaTarjetaCentro: boolean;
+    },
+  ): EstadoTarjetaCentroMes | null {
+    if (!tieneTarjetaCentro || !cuota) {
+      return null;
+    }
+
+    if (cuota.rechazadaTarjetaCentro && cuota.estado === EstadoCuota.PAGADA) {
+      return 'TARJETA_RECHAZADA_PAGADA';
+    }
+
+    if (cuota.rechazadaTarjetaCentro) {
+      return 'TARJETA_RECHAZADA_PENDIENTE';
+    }
+
+    if (cuota.estado === EstadoCuota.PAGADA) {
+      return 'TARJETA_APROBADA';
+    }
+
+    return 'TARJETA_PENDIENTE_RESPUESTA';
   }
 
   /**
@@ -272,8 +328,7 @@ export class CobrosService {
     return await queryRunner.manager
       .createQueryBuilder(Socio, 'socio')
       .innerJoin('socio.cuotas', 'cuota')
-      .where('socio.estado = :estado', { estado: 'ACTIVO' })
-      .andWhere('cuota.estado = :cuotaEstado', {
+      .where('cuota.estado = :cuotaEstado', {
         cuotaEstado: EstadoCuota.PENDIENTE,
       })
       .groupBy('socio.id')
@@ -348,6 +403,8 @@ export class CobrosService {
         );
       }
 
+      await this.validarMetodoPagoActivo(queryRunner, dto.metodoPagoId);
+
       const fechaPago = new Date();
 
       // 3. Crear el registro de pago
@@ -380,6 +437,10 @@ export class CobrosService {
         'Error registrando pago',
         error instanceof Error ? error.stack : String(error),
       );
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) {
+        throw fkError;
+      }
       if (error instanceof CustomError) {
         throw error;
       }
@@ -410,6 +471,8 @@ export class CobrosService {
 
     try {
       const cuotaIdsUnicos = Array.from(new Set(dto.cuotaIds));
+
+      await this.validarMetodoPagoActivo(queryRunner, dto.metodoPagoId);
 
       // 1. Buscar todas las cuotas por ID
       const cuotas = await queryRunner.manager.find(Cuota, {
@@ -469,6 +532,10 @@ export class CobrosService {
         'Error en pago múltiple',
         error instanceof Error ? error.stack : String(error),
       );
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) {
+        throw fkError;
+      }
       if (error instanceof CustomError) {
         throw error;
       }
@@ -752,6 +819,10 @@ export class CobrosService {
       return operacionCompleta;
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) {
+        throw fkError;
+      }
       if (error instanceof CustomError) {
         throw error;
       }
@@ -1097,6 +1168,10 @@ export class CobrosService {
       return operacionesCreadas.map((operacion) => mapaOperaciones.get(operacion.id) ?? operacion);
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) {
+        throw fkError;
+      }
       if (error instanceof CustomError) {
         throw error;
       }
@@ -1155,6 +1230,8 @@ export class CobrosService {
           ERROR_CODES.VALIDATION_ERROR,
         );
       }
+
+      await this.validarMetodosPagoActivos(queryRunner, dto.pagos);
 
       const totalCuotasCents = this.toCents(
         cuotas.reduce((acc, cuota) => acc + Number(cuota.monto), 0),
@@ -1253,6 +1330,11 @@ export class CobrosService {
         error instanceof Error ? error.stack : String(error),
       );
 
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) {
+        throw fkError;
+      }
+
       if (error instanceof CustomError) {
         throw error;
       }
@@ -1290,6 +1372,84 @@ export class CobrosService {
 
   private toCents(value: number): number {
     return Math.round(value * 100);
+  }
+
+  private async validarMetodoPagoActivo(
+    queryRunner: import('typeorm').QueryRunner,
+    metodoPagoId: number,
+  ): Promise<void> {
+    const metodoPago = await queryRunner.manager.findOne(MetodoPago, {
+      where: { id: metodoPagoId, activo: true },
+      select: ['id'],
+    });
+
+    if (!metodoPago) {
+      throw new CustomError(
+        'El metodo de pago seleccionado no existe o esta inactivo',
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+  }
+
+  private async validarMetodosPagoActivos(
+    queryRunner: import('typeorm').QueryRunner,
+    pagos: Pick<PagoMetodoMontoDto, 'metodoPagoId'>[],
+  ): Promise<void> {
+    const metodoIds = Array.from(new Set(pagos.map((pago) => pago.metodoPagoId)));
+
+    if (metodoIds.length === 0) {
+      return;
+    }
+
+    const metodosActivos = await queryRunner.manager.find(MetodoPago, {
+      where: { id: In(metodoIds), activo: true },
+      select: ['id'],
+    });
+
+    if (metodosActivos.length !== metodoIds.length) {
+      throw new CustomError(
+        'Uno o mas metodos de pago no existen o estan inactivos',
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+  }
+
+  private mapearErrorIntegridadReferencial(error: unknown): CustomError | null {
+    if (!(error instanceof QueryFailedError)) {
+      return null;
+    }
+
+    const driverError = error.driverError as {
+      code?: string;
+      detail?: string;
+      constraint?: string;
+    };
+
+    if (driverError?.code !== '23503') {
+      return null;
+    }
+
+    const detail = (driverError.detail ?? '').toLowerCase();
+    const constraint = driverError.constraint ?? '';
+    const esMetodoPago =
+      constraint === 'FK_9630b53650ed85fda8929f123ae' ||
+      detail.includes('(id_metodo_pago)');
+
+    if (esMetodoPago) {
+      return new CustomError(
+        'El metodo de pago seleccionado no existe o esta inactivo',
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    return new CustomError(
+      'Error de integridad referencial al registrar el pago',
+      400,
+      ERROR_CODES.VALIDATION_ERROR,
+    );
   }
 
   private fromCents(value: number): number {
@@ -1376,6 +1536,7 @@ export class CobrosService {
 
         resultado.procesados++;
         resultado.rechazados++;
+        sociosConEstadoARecalcular.add(cuota.socioId);
       }
 
       for (const socioId of sociosConEstadoARecalcular) {
@@ -1415,15 +1576,21 @@ export class CobrosService {
     }
 
     const metodoTransferencia = await queryRunner.manager.findOne(MetodoPago, {
-      where: { nombre: 'TRANSFERENCIA', activo: true },
-      select: ['id'],
+      where: { nombre: 'TRANSFERENCIA' },
+      select: ['id', 'activo'],
     });
 
     if (!metodoTransferencia) {
       throw new CustomError(
-        'No se encontró el método de pago TRANSFERENCIA activo',
+        'No se encontró el método de pago TRANSFERENCIA',
         400,
         ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    if (!metodoTransferencia.activo) {
+      this.logger.warn(
+        'El método de pago TRANSFERENCIA está inactivo, se utiliza igualmente para registrar pagos aprobados de Tarjeta del Centro.',
       );
     }
 
@@ -1563,6 +1730,7 @@ export class CobrosService {
   async obtenerReporteCobranza(periodo: string): Promise<ReporteCobranza> {
     const cuotas = await this.cuotaRepository.find({
       where: { periodo },
+      relations: ['socio'],
     });
 
     if (cuotas.length === 0) {
@@ -1591,6 +1759,59 @@ export class CobrosService {
     const morosidad =
       cuotas.length > 0 ? (cuotasPendientes.length / cuotas.length) * 100 : 0;
 
+    // Desglose por método de pago: consultar pagos del período con su método
+    const pagosDelPeriodo = await this.pagoCuotaRepository
+      .createQueryBuilder('pago')
+      .leftJoinAndSelect('pago.metodoPago', 'metodoPago')
+      .innerJoin('pago.cuota', 'cuota')
+      .where('cuota.periodo = :periodo', { periodo })
+      .getMany();
+
+    const desglosePorMetodoMap = new Map<string, { totalCobrado: number; cantidadPagos: number }>();
+    for (const pago of pagosDelPeriodo) {
+      const nombreMetodo = pago.metodoPago?.nombre ?? 'Sin especificar';
+      const existing = desglosePorMetodoMap.get(nombreMetodo) ?? { totalCobrado: 0, cantidadPagos: 0 };
+      existing.totalCobrado += Number(pago.montoPagado);
+      existing.cantidadPagos += 1;
+      desglosePorMetodoMap.set(nombreMetodo, existing);
+    }
+
+    const desglosePorMetodoPago: DesglosePorMetodoPago[] = Array.from(
+      desglosePorMetodoMap.entries(),
+    ).map(([metodoPago, data]) => ({
+      metodoPago,
+      totalCobrado: data.totalCobrado,
+      cantidadPagos: data.cantidadPagos,
+    }));
+
+    // Resumen de Tarjeta del Centro
+    const cuotasTarjeta = cuotas.filter(
+      (c) => c.socio?.tarjetaCentro === true && c.socio?.numeroTarjetaCentro,
+    );
+    const sociosConTarjetaIds = new Set(
+      cuotasTarjeta.map((c) => c.socioId),
+    );
+    const cuotasPagadasTarjeta = cuotasTarjeta.filter(
+      (c) => c.estado === EstadoCuota.PAGADA,
+    );
+    const cuotasPendientesTarjeta = cuotasTarjeta.filter(
+      (c) => c.estado === EstadoCuota.PENDIENTE,
+    );
+
+    const tarjetaCentro: ResumenTarjetaCentro = {
+      sociosConTarjeta: sociosConTarjetaIds.size,
+      cuotasPagadasTarjeta: cuotasPagadasTarjeta.length,
+      totalCobradoTarjeta: cuotasPagadasTarjeta.reduce(
+        (sum, c) => sum + Number(c.monto),
+        0,
+      ),
+      cuotasPendientesTarjeta: cuotasPendientesTarjeta.length,
+      totalPendienteTarjeta: cuotasPendientesTarjeta.reduce(
+        (sum, c) => sum + Number(c.monto),
+        0,
+      ),
+    };
+
     return {
       periodo,
       totalGenerado,
@@ -1599,6 +1820,8 @@ export class CobrosService {
       cuotasPendientes: cuotasPendientes.length,
       cuotasPagadas: cuotasPagadas.length,
       morosidad: Math.round(morosidad * 100) / 100,
+      desglosePorMetodoPago,
+      tarjetaCentro,
     };
   }
 
@@ -1623,7 +1846,7 @@ export class CobrosService {
   }
 
   async obtenerCuotasTarjetaCentro(periodo: string): Promise<Cuota[]> {
-    return this.cuotaRepository
+    const cuotas = await this.cuotaRepository
       .createQueryBuilder('cuota')
       .leftJoinAndSelect('cuota.socio', 'socio')
       .where('cuota.periodo = :periodo', { periodo })
@@ -1640,6 +1863,27 @@ export class CobrosService {
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .getMany();
+
+    const cuotasValidas = cuotas.filter((cuota) => {
+      const numeroTarjeta = cuota.socio?.numeroTarjetaCentro?.replace(/\D/g, '');
+      return Boolean(numeroTarjeta && /^\d{16}$/.test(numeroTarjeta));
+    });
+
+    if (cuotasValidas.length !== cuotas.length) {
+      const cuotasInvalidas = cuotas
+        .filter((cuota) => !cuotasValidas.includes(cuota))
+        .map((cuota) => {
+          const socioId = cuota.socio?.id ?? cuota.socioId;
+          const tarjeta = cuota.socio?.numeroTarjetaCentro ?? 'sin numero';
+          return `cuota ${cuota.id} socio ${socioId} tarjeta ${tarjeta}`;
+        });
+
+      this.logger.warn(
+        `Se excluyeron ${cuotasInvalidas.length} cuotas del archivo Tarjeta del Centro para ${periodo} por tarjetas invalidas: ${cuotasInvalidas.join('; ')}`,
+      );
+    }
+
+    return cuotasValidas;
   }
 
   /**
@@ -1711,7 +1955,7 @@ export class CobrosService {
     if (filtros?.busqueda) {
       const terminoBusqueda = `%${filtros.busqueda}%`;
       query.andWhere(
-        '(socio.nombre LIKE :busqueda OR socio.apellido LIKE :busqueda OR socio.dni LIKE :busqueda)',
+        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
         { busqueda: terminoBusqueda },
       );
     }
@@ -1737,11 +1981,23 @@ export class CobrosService {
   /**
    * Obtiene socios elegibles para generacion de cuotas en un periodo
    */
-  async getSociosElegibles(periodo: string) {
-    const socios = await this.socioRepository.find({
-      relations: ['categoria'],
-      order: { apellido: 'ASC', nombre: 'ASC' },
-    });
+
+  async getSociosElegibles(periodo: string, busqueda?: string) {
+    const sociosQuery = this.socioRepository.createQueryBuilder('socio');
+
+    if (busqueda && busqueda.trim()) {
+      const terminoBusqueda = `%${busqueda.trim()}%`;
+      sociosQuery.andWhere(
+        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni ILIKE :busqueda)',
+        { busqueda: terminoBusqueda },
+      );
+    }
+
+    const socios = await sociosQuery
+      .leftJoinAndSelect('socio.categoria', 'categoria')
+      .orderBy('socio.apellido', 'ASC')
+      .addOrderBy('socio.nombre', 'ASC')
+      .getMany();
 
     const cuotasExistentes = await this.cuotaRepository.find({
       where: { periodo },
@@ -1779,7 +2035,6 @@ export class CobrosService {
       total: sociosElegibles.length,
     };
   }
-
   /**
    * Genera cuotas para socios seleccionados individualmente
    * Implementa morosidad en 2 fases: aviso a 3 meses, inhabilitacion a 4+
@@ -1906,10 +2161,12 @@ export class CobrosService {
         | 'CON_PAGO'
         | 'CON_DEUDA';
       categoriaSocio?: 'TODOS' | 'ACTIVO' | 'ADHERENTE';
+      tarjetaCentro?: boolean;
     },
   ) {
     const estadoPago = filtros?.estadoPago ?? 'TODOS';
     const categoriaSocio = filtros?.categoriaSocio ?? 'TODOS';
+    const tarjetaCentro = filtros?.tarjetaCentro;
     const mesNormalizado =
       typeof filtros?.mes === 'number'
         ? String(filtros.mes).padStart(2, '0')
@@ -1932,8 +2189,12 @@ export class CobrosService {
       const termino = `%${filtros.busqueda}%`;
       sociosQuery.andWhere(
         new Brackets((qb) => {
-          qb.where('socio.nombre LIKE :busqueda', { busqueda: termino })
-            .orWhere('socio.apellido LIKE :busqueda', { busqueda: termino })
+          qb.where('unaccent(socio.nombre) ILIKE unaccent(:busqueda)', {
+            busqueda: termino,
+          })
+            .orWhere('unaccent(socio.apellido) ILIKE unaccent(:busqueda)', {
+              busqueda: termino,
+            })
             .orWhere('socio.dni LIKE :busqueda', { busqueda: termino });
         }),
       );
@@ -1942,6 +2203,12 @@ export class CobrosService {
     if (categoriaSocio !== 'TODOS') {
       sociosQuery.andWhere('UPPER(categoria.nombre) = :categoriaSocio', {
         categoriaSocio,
+      });
+    }
+
+    if (typeof tarjetaCentro === 'boolean') {
+      sociosQuery.andWhere('socio.tarjetaCentro = :tarjetaCentro', {
+        tarjetaCentro,
       });
     }
 
@@ -2079,34 +2346,88 @@ export class CobrosService {
         .getMany();
     }
 
-    const cuotasPorSocio = new Map<number, Map<string, string>>();
+    const cuotasPorSocio = new Map<
+      number,
+      Map<
+        string,
+        {
+          estado: EstadoCuota;
+          rechazadaTarjetaCentro: boolean;
+        }
+      >
+    >();
+
     for (const cuota of cuotasDelAnio) {
       if (!cuotasPorSocio.has(cuota.socioId)) {
         cuotasPorSocio.set(cuota.socioId, new Map());
       }
+
       const mes = cuota.periodo.split('-')[1];
       const cuotasMes = cuotasPorSocio.get(cuota.socioId)!;
-      const estadoActual = cuotasMes.get(mes);
+      const cuotaActual = cuotasMes.get(mes);
 
-      if (estadoActual === EstadoCuota.PAGADA) {
+      if (!cuotaActual) {
+        cuotasMes.set(mes, {
+          estado: cuota.estado,
+          rechazadaTarjetaCentro: cuota.rechazadaTarjetaCentro,
+        });
+        continue;
+      }
+
+      if (cuotaActual.estado === EstadoCuota.PAGADA) {
+        if (
+          cuota.estado === EstadoCuota.PAGADA &&
+          cuota.rechazadaTarjetaCentro &&
+          !cuotaActual.rechazadaTarjetaCentro
+        ) {
+          cuotasMes.set(mes, {
+            estado: cuota.estado,
+            rechazadaTarjetaCentro: true,
+          });
+        }
         continue;
       }
 
       if (cuota.estado === EstadoCuota.PAGADA) {
-        cuotasMes.set(mes, EstadoCuota.PAGADA);
+        cuotasMes.set(mes, {
+          estado: EstadoCuota.PAGADA,
+          rechazadaTarjetaCentro: cuota.rechazadaTarjetaCentro,
+        });
         continue;
       }
 
-      cuotasMes.set(mes, cuota.estado);
+      if (cuota.rechazadaTarjetaCentro && !cuotaActual.rechazadaTarjetaCentro) {
+        cuotasMes.set(mes, {
+          estado: cuota.estado,
+          rechazadaTarjetaCentro: true,
+        });
+      }
     }
 
     const sociosConPagos = socios.map((socio) => {
-      const cuotasMes = cuotasPorSocio.get(socio.id) || new Map();
+      const cuotasMes =
+        cuotasPorSocio.get(socio.id) ||
+        new Map<
+          string,
+          {
+            estado: EstadoCuota;
+            rechazadaTarjetaCentro: boolean;
+          }
+        >();
       const meses: Record<string, string | null> = {};
+      const mesesTarjetaCentro: Record<string, EstadoTarjetaCentroMes | null> =
+        {};
+
       for (let mes = 1; mes <= 12; mes++) {
         const mesKey = String(mes).padStart(2, '0');
-        meses[mesKey] = cuotasMes.get(mesKey) || null;
+        const cuotaMes = cuotasMes.get(mesKey);
+        meses[mesKey] = cuotaMes?.estado ?? null;
+        mesesTarjetaCentro[mesKey] = this.resolverEstadoTarjetaCentroMes(
+          socio.tarjetaCentro ?? false,
+          cuotaMes,
+        );
       }
+
       return {
         socioId: socio.id,
         nombre: socio.nombre,
@@ -2114,7 +2435,9 @@ export class CobrosService {
         dni: socio.dni || undefined,
         estado: socio.estado,
         categoriaNombre: socio.categoria?.nombre ?? 'Sin categoria',
+        tarjetaCentro: socio.tarjetaCentro ?? false,
         meses,
+        mesesTarjetaCentro,
       };
     });
 
@@ -2165,7 +2488,7 @@ export class CobrosService {
     if (query.busqueda) {
       const termino = `%${query.busqueda}%`;
       queryBuilder.andWhere(
-        '(socio.nombre LIKE :busqueda OR socio.apellido LIKE :busqueda OR socio.dni LIKE :busqueda)',
+        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
         { busqueda: termino },
       );
     }
@@ -2270,7 +2593,7 @@ export class CobrosService {
     if (query.busqueda) {
       const termino = `%${query.busqueda}%`;
       statsQueryBuilder.andWhere(
-        '(socio.nombre LIKE :busqueda OR socio.apellido LIKE :busqueda OR socio.dni LIKE :busqueda)',
+        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
         { busqueda: termino },
       );
     }
@@ -2355,9 +2678,18 @@ export class CobrosService {
     let totalCuotasPendientes = 0;
     let totalCuotasPagadas = 0;
 
+    // Acumuladores de método de pago y tarjeta centro consolidado
+    const desglosePorMetodoMapGlobal = new Map<string, { totalCobrado: number; cantidadPagos: number }>();
+    let sociosConTarjetaIdsGlobal = new Set<number>();
+    let totalCuotasPagadasTarjeta = 0;
+    let totalCobradoTarjeta = 0;
+    let totalCuotasPendientesTarjeta = 0;
+    let totalPendienteTarjeta = 0;
+
     for (const periodo of periodos) {
       const cuotas = await this.cuotaRepository.find({
         where: { periodo },
+        relations: ['socio'],
       });
 
       // Si no hay cuotas para este período, incluir con valores en 0
@@ -2399,6 +2731,36 @@ export class CobrosService {
       totalCobrado += cobrado;
       totalCuotasPendientes += pendientes.length;
       totalCuotasPagadas += pagadas.length;
+
+      // Acumular desglose por método de pago del período
+      const pagosDelPeriodo = await this.pagoCuotaRepository
+        .createQueryBuilder('pago')
+        .leftJoinAndSelect('pago.metodoPago', 'metodoPago')
+        .innerJoin('pago.cuota', 'cuota')
+        .where('cuota.periodo = :periodo', { periodo })
+        .getMany();
+
+      for (const pago of pagosDelPeriodo) {
+        const nombreMetodo = pago.metodoPago?.nombre ?? 'Sin especificar';
+        const existing = desglosePorMetodoMapGlobal.get(nombreMetodo) ?? { totalCobrado: 0, cantidadPagos: 0 };
+        existing.totalCobrado += Number(pago.montoPagado);
+        existing.cantidadPagos += 1;
+        desglosePorMetodoMapGlobal.set(nombreMetodo, existing);
+      }
+
+      // Acumular tarjeta del centro del período
+      const cuotasTarjeta = cuotas.filter(
+        (c) => c.socio?.tarjetaCentro === true && c.socio?.numeroTarjetaCentro,
+      );
+      for (const c of cuotasTarjeta) {
+        sociosConTarjetaIdsGlobal.add(c.socioId);
+      }
+      const pagadasTarjeta = cuotasTarjeta.filter((c) => c.estado === EstadoCuota.PAGADA);
+      const pendientesTarjeta = cuotasTarjeta.filter((c) => c.estado === EstadoCuota.PENDIENTE);
+      totalCuotasPagadasTarjeta += pagadasTarjeta.length;
+      totalCobradoTarjeta += pagadasTarjeta.reduce((sum, c) => sum + Number(c.monto), 0);
+      totalCuotasPendientesTarjeta += pendientesTarjeta.length;
+      totalPendienteTarjeta += pendientesTarjeta.reduce((sum, c) => sum + Number(c.monto), 0);
     }
 
     // Calcular promedios del consolidado
@@ -2411,6 +2773,22 @@ export class CobrosService {
           100
         : 0;
 
+    const desglosePorMetodoPago: DesglosePorMetodoPago[] = Array.from(
+      desglosePorMetodoMapGlobal.entries(),
+    ).map(([metodoPago, data]) => ({
+      metodoPago,
+      totalCobrado: data.totalCobrado,
+      cantidadPagos: data.cantidadPagos,
+    }));
+
+    const tarjetaCentro: ResumenTarjetaCentro = {
+      sociosConTarjeta: sociosConTarjetaIdsGlobal.size,
+      cuotasPagadasTarjeta: totalCuotasPagadasTarjeta,
+      totalCobradoTarjeta,
+      cuotasPendientesTarjeta: totalCuotasPendientesTarjeta,
+      totalPendienteTarjeta,
+    };
+
     return {
       periodoDesde,
       periodoHasta,
@@ -2422,6 +2800,8 @@ export class CobrosService {
       morosidad: Math.round(morosidad * 100) / 100,
       cantidadMeses: periodos.length,
       meses: reportesPorMes,
+      desglosePorMetodoPago,
+      tarjetaCentro,
     };
   }
 
