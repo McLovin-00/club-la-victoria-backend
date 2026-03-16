@@ -327,9 +327,24 @@ export class CobradoresService {
     };
   }
 
-  async buscarSociosMobile(query: string, limit: number = 20) {
+  async buscarSociosMobile(query: string, offset: number = 0, limit: number = 50) {
     const search = query?.trim();
 
+    // Query base para contar total
+    const countQb = this.socioRepository
+      .createQueryBuilder('socio')
+      .where('socio.estado IN (:...estados)', { estados: ['ACTIVO', 'MOROSO'] });
+
+    if (search) {
+      countQb.andWhere(
+        '(unaccent(socio.nombre) ILIKE unaccent(:term) OR unaccent(socio.apellido) ILIKE unaccent(:term) OR socio.dni LIKE :term)',
+        { term: `%${search}%` },
+      );
+    }
+
+    const total = await countQb.getCount();
+
+    // Query para obtener datos con paginación
     const qb = this.socioRepository
       .createQueryBuilder('socio')
       .leftJoin('socio.grupoFamiliar', 'grupoFamiliar')
@@ -354,7 +369,8 @@ export class CobradoresService {
       .addGroupBy('grupoFamiliar.nombre')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
-      .limit(limit);
+      .skip(offset)
+      .take(limit);
 
     if (search) {
       qb.andWhere(
@@ -365,7 +381,7 @@ export class CobradoresService {
 
     const rows = await qb.getRawMany();
 
-    return rows.map((row) => ({
+    const data = rows.map((row) => ({
       id: Number(row.id),
       nombre: row.nombre,
       apellido: row.apellido,
@@ -380,6 +396,14 @@ export class CobradoresService {
           }
         : undefined,
     }));
+
+    return {
+      data,
+      total,
+      offset,
+      limit,
+      hasMore: offset + data.length < total,
+    };
   }
 
   async cuotasPendientesSocioMobile(socioId: number) {

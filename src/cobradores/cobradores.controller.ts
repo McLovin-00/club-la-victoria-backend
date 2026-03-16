@@ -67,8 +67,14 @@ export class CobradoresController {
 
   @Get('mobile/socios')
   @ApiOperation({ summary: 'Buscar socios para flujo mobile de cobranzas' })
-  buscarSocios(@Query('q') q: string) {
-    return this.cobradoresService.buscarSociosMobile(q);
+  buscarSocios(
+    @Query('q') q: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    const parsedLimit = limit ? parseInt(limit, 10) : 50;
+    return this.cobradoresService.buscarSociosMobile(q, parsedOffset, parsedLimit);
   }
 
   @Get('mobile/socios/:id/cuotas-pendientes')
