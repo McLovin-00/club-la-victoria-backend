@@ -64,6 +64,7 @@ describe('CobrosService', () => {
             findOne: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -227,9 +228,43 @@ describe('CobrosService', () => {
     });
   });
 
+  describe('reglas de morosidad', () => {
+    it('debería identificar morosos por cuotas pendientes sin filtrar por estado actual del socio', async () => {
+      const mockMorososQueryBuilder = {
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        having: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+
+      mockQueryRunner.manager.createQueryBuilder.mockReturnValue(
+        mockMorososQueryBuilder as unknown as any,
+      );
+
+      await (service as unknown as {
+        identificarSociosMorosos: (
+          queryRunner: typeof mockQueryRunner,
+        ) => Promise<Socio[]>;
+      }).identificarSociosMorosos(mockQueryRunner);
+
+      expect(mockMorososQueryBuilder.where).toHaveBeenCalledWith(
+        'cuota.estado = :cuotaEstado',
+        {
+          cuotaEstado: EstadoCuota.PENDIENTE,
+        },
+      );
+      expect(mockMorososQueryBuilder.andWhere).not.toHaveBeenCalledWith(
+        'socio.estado = :estado',
+        expect.anything(),
+      );
+    });
+  });
+
   describe('getSociosElegibles', () => {
     it('debería usar monto histórico cuando ya existe cuota del período', async () => {
-      jest.spyOn(socioRepository, 'find').mockResolvedValue([
+      const mockSocios = [
         {
           id: 1,
           nombre: 'Juan',
@@ -248,7 +283,19 @@ describe('CobrosService', () => {
           tarjetaCentro: true,
           categoria: { id: 1, nombre: 'ACTIVO', montoMensual: 15000, exento: false },
         },
-      ] as unknown as Socio[]);
+      ] as unknown as Socio[];
+
+      const sociosQueryBuilder = {
+        andWhere: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockSocios),
+      };
+
+      jest
+        .spyOn(socioRepository, 'createQueryBuilder')
+        .mockReturnValue(sociosQueryBuilder as unknown as any);
 
       jest.spyOn(cuotaRepository, 'find').mockResolvedValue([
         {
@@ -273,7 +320,7 @@ describe('CobrosService', () => {
     });
 
     it('debería usar el monto de categoría cuando no existe cuota para el período', async () => {
-      jest.spyOn(socioRepository, 'find').mockResolvedValue([
+      const mockSocios = [
         {
           id: 10,
           nombre: 'Laura',
@@ -283,7 +330,19 @@ describe('CobrosService', () => {
           tarjetaCentro: false,
           categoria: { id: 2, nombre: 'ADHERENTE', montoMensual: 8000, exento: false },
         },
-      ] as unknown as Socio[]);
+      ] as unknown as Socio[];
+
+      const sociosQueryBuilder = {
+        andWhere: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockSocios),
+      };
+
+      jest
+        .spyOn(socioRepository, 'createQueryBuilder')
+        .mockReturnValue(sociosQueryBuilder as unknown as any);
 
       jest.spyOn(cuotaRepository, 'find').mockResolvedValue([]);
 
@@ -311,6 +370,7 @@ describe('CobrosService', () => {
 
       mockQueryRunner.manager.findOne
         .mockResolvedValueOnce(mockCuota)
+        .mockResolvedValueOnce({ id: 1, activo: true })
         .mockResolvedValueOnce({ id: 1, estado: 'ACTIVO' });
       mockQueryRunner.manager.count.mockResolvedValue(2);
       mockQueryRunner.manager.create.mockReturnValue({
@@ -349,6 +409,7 @@ describe('CobrosService', () => {
 
       mockQueryRunner.manager.findOne
         .mockResolvedValueOnce(mockCuota)
+        .mockResolvedValueOnce({ id: 1, activo: true })
         .mockResolvedValueOnce({ id: 1, estado: 'MOROSO' });
       mockQueryRunner.manager.count.mockResolvedValue(3);
       mockQueryRunner.manager.create.mockReturnValue({
@@ -400,6 +461,31 @@ describe('CobrosService', () => {
       ).rejects.toThrow(CustomError);
     });
 
+    it('debería rechazar método de pago inexistente o inactivo', async () => {
+      const mockCuota = {
+        id: 1,
+        socioId: 1,
+        periodo: '2026-02',
+        monto: 5000,
+        estado: EstadoCuota.PENDIENTE,
+        createdAt: new Date('2026-02-01T10:00:00.000Z'),
+        socio: { id: 1, nombre: 'Juan', apellido: 'Pérez' },
+      };
+
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(mockCuota)
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        service.registrarPago({
+          cuotaId: 1,
+          metodoPagoId: 999,
+        }),
+      ).rejects.toMatchObject({
+        message: 'El metodo de pago seleccionado no existe o esta inactivo',
+      });
+    });
+
     it('debería rechazar cuota no encontrada', async () => {
       mockQueryRunner.manager.findOne.mockResolvedValue(null);
 
@@ -409,6 +495,37 @@ describe('CobrosService', () => {
           metodoPagoId: 1,
         }),
       ).rejects.toThrow(CustomError);
+    });
+  });
+
+  describe('procesarResultadosTarjetaCentro', () => {
+    it('debería marcar al socio como MOROSO cuando acumula 4 cuotas pendientes al rechazar tarjeta', async () => {
+      const mockCuota = {
+        id: 10,
+        socioId: 1,
+        periodo: '2026-02',
+        monto: 5000,
+        estado: EstadoCuota.PENDIENTE,
+        rechazadaTarjetaCentro: false,
+        createdAt: new Date('2026-02-01T10:00:00.000Z'),
+        socio: { id: 1, nombre: 'Juan', apellido: 'Pérez' },
+      } as unknown as Cuota;
+
+      mockQueryRunner.manager.find.mockResolvedValue([mockCuota]);
+      mockQueryRunner.manager.findOne.mockResolvedValue({ id: 1, estado: 'ACTIVO' });
+      mockQueryRunner.manager.count.mockResolvedValue(4);
+      mockQueryRunner.manager.save.mockResolvedValue({ ...mockCuota, rechazadaTarjetaCentro: true });
+
+      const result = await service.procesarResultadosTarjetaCentro({
+        resultados: [{ cuotaId: 10, aprobada: false }],
+      });
+
+      expect(result.procesados).toBe(1);
+      expect(result.rechazados).toBe(1);
+      expect(mockQueryRunner.manager.update).toHaveBeenCalledWith(Socio, 1, {
+        estado: 'MOROSO',
+      });
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
   });
 
@@ -495,6 +612,26 @@ describe('CobrosService', () => {
         .spyOn(cuotaRepository, 'find')
         .mockResolvedValue(mockCuotas as Cuota[]);
 
+      const pagoCuotaQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        innerJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            montoPagado: 5000,
+            metodoPago: { nombre: 'EFECTIVO' },
+          },
+          {
+            montoPagado: 5000,
+            metodoPago: { nombre: 'TRANSFERENCIA' },
+          },
+        ]),
+      };
+
+      jest
+        .spyOn(pagoCuotaRepository, 'createQueryBuilder')
+        .mockReturnValue(pagoCuotaQueryBuilder as unknown as any);
+
       const result = await service.obtenerReporteCobranza('2026-02');
 
       expect(result.periodo).toBe('2026-02');
@@ -502,6 +639,12 @@ describe('CobrosService', () => {
       expect(result.totalCobrado).toBe(10000);
       expect(result.cuotasPagadas).toBe(2);
       expect(result.cuotasPendientes).toBe(1);
+      expect(result.desglosePorMetodoPago).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ metodoPago: 'EFECTIVO', totalCobrado: 5000 }),
+          expect.objectContaining({ metodoPago: 'TRANSFERENCIA', totalCobrado: 5000 }),
+        ]),
+      );
     });
 
     it('deberia lanzar error si no hay cuotas para el periodo', async () => {
@@ -557,9 +700,17 @@ describe('CobrosService', () => {
         },
       ];
 
+      const sociosQueryBuilder = {
+        andWhere: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockSocios),
+      };
+
       jest
-        .spyOn(socioRepository, 'find')
-        .mockResolvedValue(mockSocios as Socio[]);
+        .spyOn(socioRepository, 'createQueryBuilder')
+        .mockReturnValue(sociosQueryBuilder as unknown as any);
       jest
         .spyOn(cuotaRepository, 'find')
         .mockResolvedValue([{ socioId: 2, periodo: '2026-02' }] as Cuota[]);
@@ -763,7 +914,7 @@ describe('CobrosService', () => {
       });
 
       expect(mainQueryBuilder.andWhere).toHaveBeenCalledWith(
-        '(socio.nombre LIKE :busqueda OR socio.apellido LIKE :busqueda OR socio.dni LIKE :busqueda)',
+        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
         { busqueda: '%Perez%' },
       );
       expect(result.morosos).toHaveLength(1);
@@ -1032,6 +1183,48 @@ describe('CobrosService', () => {
           cobroOperacionId: 77,
         }),
       );
+    });
+  });
+
+  describe('obtenerCuotasTarjetaCentro', () => {
+    it('debería excluir cuotas con tarjetas inválidas y devolver solo las exportables', async () => {
+      const queryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            socioId: 10,
+            socio: {
+              id: 10,
+              tarjetaCentro: true,
+              numeroTarjetaCentro: '5400000012345678',
+            },
+          },
+          {
+            id: 2,
+            socioId: 11,
+            socio: {
+              id: 11,
+              tarjetaCentro: true,
+              numeroTarjetaCentro: 'TC143102',
+            },
+          },
+        ]),
+      };
+
+      jest
+        .spyOn(cuotaRepository, 'createQueryBuilder')
+        .mockReturnValue(queryBuilder as never);
+
+      const result = await service.obtenerCuotasTarjetaCentro('2026-04');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(1);
+      expect(queryBuilder.getMany).toHaveBeenCalled();
     });
   });
 });
