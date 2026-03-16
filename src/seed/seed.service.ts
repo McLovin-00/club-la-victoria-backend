@@ -372,7 +372,7 @@ export class SeedService {
   async run() {
     this.logger.log('🚀 Iniciando seed de producción...');
     await this.createCategoriasSocio();
-    await this.createCobradoresBase();
+    await this.createCobradorAnaMariaRodriguez();
     await this.createMetodosPago();
     this.logger.log('✅ Seed de producción finalizado.');
   }
