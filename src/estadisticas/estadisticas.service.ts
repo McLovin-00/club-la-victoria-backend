@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository, Like } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { RegistroIngreso } from '../registro-ingreso/entities/registro-ingreso.entity';
 import { StatisticsResponseDto } from './dto/statistics-response.dto';
 import { TipoIngreso } from '../registro-ingreso/entities/registro-ingreso.entity';
@@ -42,8 +42,8 @@ export class EstadisticasService {
       if (words.length === 1) {
         // Búsqueda simple con una sola palabra
         queryBuilder.andWhere(
-          '(socio.id IS NOT NULL AND (socio.nombre ILIKE :term OR socio.apellido ILIKE :term)) OR ' +
-            '(socio.id IS NULL AND (registro.nombreNoSocio ILIKE :term OR registro.apellidoNoSocio ILIKE :term))',
+          '(socio.id IS NOT NULL AND (unaccent(socio.nombre) ILIKE unaccent(:term) OR unaccent(socio.apellido) ILIKE unaccent(:term))) OR ' +
+            '(socio.id IS NULL AND (unaccent(registro.nombreNoSocio) ILIKE unaccent(:term) OR unaccent(registro.apellidoNoSocio) ILIKE unaccent(:term)))',
           { term: `%${words[0]}%` },
         );
       } else {
@@ -55,10 +55,14 @@ export class EstadisticasService {
         words.forEach((word, index) => {
           const paramKey = `word${index}`;
           parameters[paramKey] = `%${word}%`;
-          conditions.push(`socio.nombre ILIKE :${paramKey}`);
-          conditions.push(`socio.apellido ILIKE :${paramKey}`);
-          conditions.push(`registro.nombreNoSocio ILIKE :${paramKey}`);
-          conditions.push(`registro.apellidoNoSocio ILIKE :${paramKey}`);
+          conditions.push(`unaccent(socio.nombre) ILIKE unaccent(:${paramKey})`);
+          conditions.push(`unaccent(socio.apellido) ILIKE unaccent(:${paramKey})`);
+          conditions.push(
+            `unaccent(registro.nombreNoSocio) ILIKE unaccent(:${paramKey})`,
+          );
+          conditions.push(
+            `unaccent(registro.apellidoNoSocio) ILIKE unaccent(:${paramKey})`,
+          );
         });
 
         // Usamos OR entre todas las condiciones - si alguna palabra coincide, retorna el registro

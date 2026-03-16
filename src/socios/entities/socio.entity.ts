@@ -70,7 +70,7 @@ export class Socio {
   @JoinColumn({ name: 'id_categoria' })
   categoria?: CategoriaSocio;
 
-  @ManyToOne(() => GrupoFamiliar, { nullable: true })
+  @ManyToOne(() => GrupoFamiliar, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'id_grupo_familiar' })
   @Index()
   grupoFamiliar?: GrupoFamiliar;

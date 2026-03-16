@@ -165,30 +165,14 @@ export class GruposFamiliaresService {
     }
   }
 
-  /**
-   * Elimina un grupo familiar (los socios quedan sin grupo - SET NULL)
+/**
+   * Elimina un grupo familiar (los socios quedan sin grupo - ON DELETE SET NULL)
    */
   async remove(id: number): Promise<void> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
       const grupo = await this.findOne(id);
-
-      // Primero, desasignar todos los socios del grupo (SET NULL manual)
-      await queryRunner.manager.update(
-        Socio,
-        { grupoFamiliar: { id: grupo.id } },
-        { grupoFamiliar: undefined as unknown as GrupoFamiliar },
-      );
-
-      // Luego eliminar el grupo
-      await queryRunner.manager.remove(grupo);
-
-      await queryRunner.commitTransaction();
+      await this.grupoRepository.remove(grupo);
     } catch (error) {
-      await queryRunner.rollbackTransaction();
       this.logger.error(
         `Error eliminando grupo familiar ${id}`,
         error instanceof Error ? error.stack : String(error),
@@ -201,8 +185,6 @@ export class GruposFamiliaresService {
         500,
         ERROR_CODES.INTERNAL_SERVER_ERROR,
       );
-    } finally {
-      await queryRunner.release();
     }
   }
 

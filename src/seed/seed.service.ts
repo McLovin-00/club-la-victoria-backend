@@ -373,6 +373,7 @@ export class SeedService {
     this.logger.log('🚀 Iniciando seed de producción...');
     await this.createCategoriasSocio();
     await this.createCobradoresBase();
+    await this.createMetodosPago();
     this.logger.log('✅ Seed de producción finalizado.');
   }
 
@@ -396,6 +397,26 @@ export class SeedService {
     await this.createCuotasSocios2025();
     await this.createRegistrosIngreso();
     this.logger.log('✅ Seed de desarrollo finalizado.');
+  }
+
+  /**
+   * Ejecuta un seed reducido con los socios del seed de desarrollo
+   * y solo la cobradora Ana Maria Rodriguez, sin cuotas generadas.
+   */
+  async runSeed2() {
+    this.logger.log('🚀 Iniciando seed2...');
+    await this.createCategoriasSocio();
+    await this.createMetodosPago();
+    await this.createAdminUser();
+    await this.createCobradorAnaMariaRodriguez();
+    await this.createGruposFamiliares();
+    this.logger.log('✅ Seed2 finalizado.');
+  }
+
+  async runClearDatabase() {
+    this.logger.warn('🧹 Iniciando vaciado de tablas de la base de datos...');
+    await this.clearDatabaseData();
+    this.logger.warn('🧹 Base de datos vaciada. Ya podés ejecutar el seed que necesites.');
   }
 
   private async createCobradoresBase() {
@@ -453,11 +474,89 @@ export class SeedService {
     }
   }
 
+  private async createCobradorAnaMariaRodriguez() {
+    await this.ensureCobradorConComision('Ana María Rodríguez (chuli)');
+  }
+
+  private async ensureCobradorConComision(nombre: string) {
+    const existe = await this.cobradorRepository.findOne({
+      where: { nombre },
+    });
+
+    if (!existe) {
+      const cobrador = this.cobradorRepository.create({
+        nombre,
+        activo: true,
+      });
+      const cobradorGuardado = await this.cobradorRepository.save(cobrador);
+      this.logger.log(`🧾 Cobrador "${nombre}" creado.`);
+      await this.ensureComisionConfig(cobradorGuardado.id, nombre, false);
+      return;
+    }
+
+    await this.ensureComisionConfig(existe.id, nombre, true);
+  }
+
+  private async ensureComisionConfig(
+    cobradorId: number,
+    nombre: string,
+    cobradorExistente: boolean,
+  ) {
+    const comisionExistente = await this.comisionConfigRepository.findOne({
+      where: { cobradorId },
+    });
+
+    if (comisionExistente) {
+      return;
+    }
+
+    const comisionConfig = this.comisionConfigRepository.create({
+      cobradorId,
+      porcentaje: 0.15,
+      vigenteDesde: new Date(),
+    });
+
+    await this.comisionConfigRepository.save(comisionConfig);
+
+    if (cobradorExistente) {
+      this.logger.log(
+        `💰 Comisión por defecto (15%) asignada a "${nombre}" (cobrador existente).`,
+      );
+      return;
+    }
+
+    this.logger.log(`💰 Comisión por defecto (15%) asignada a "${nombre}".`);
+  }
+
+  private async clearDatabaseData() {
+    await this.usuarioRepository.query(
+      `TRUNCATE TABLE
+        cobro_operacion_linea,
+        cobro_operacion,
+        cobrador_cuenta_corriente_movimiento,
+        cobrador_dispositivo,
+        cobrador_comision_config,
+        pago_cuota,
+        cuota,
+        registro_ingreso,
+        socio_temporada,
+        socio,
+        grupo_familiar,
+        usuario,
+        temporada_pileta,
+        metodos_pago,
+        cobrador,
+        categoria_socio
+      RESTART IDENTITY CASCADE;`,
+    );
+
+    this.logger.warn('🧹 Datos eliminados de la base de datos.');
+  }
+
   private async createMetodosPago() {
     const metodosPagoBase = [
       { nombre: 'EFECTIVO', descripcion: 'Pago en efectivo', orden: 1 },
       { nombre: 'TRANSFERENCIA', descripcion: 'Transferencia bancaria', orden: 2 },
-      { nombre: 'TARJETA', descripcion: 'Pago con tarjeta de débito/crédito', orden: 3 },
     ];
 
     for (const metodo of metodosPagoBase) {
@@ -472,6 +571,24 @@ export class SeedService {
           }),
         );
         this.logger.log(`💳 Método de pago "${metodo.nombre}" creado.`);
+        continue;
+      }
+
+      const necesitaActualizacion =
+        !existe.activo ||
+        existe.descripcion !== metodo.descripcion ||
+        existe.orden !== metodo.orden;
+
+      if (necesitaActualizacion) {
+        await this.metodoPagoRepository.save({
+          ...existe,
+          descripcion: metodo.descripcion,
+          orden: metodo.orden,
+          activo: true,
+        });
+        this.logger.log(
+          `💳 Método de pago "${metodo.nombre}" actualizado y activado.`,
+        );
       }
     }
   }

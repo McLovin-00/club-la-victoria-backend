@@ -34,5 +34,8 @@ export {
   ReporteCobranzaRangoQueryDto,
   ReporteCobranzaMesDto,
   ReporteCobranzaRangoResponseDto,
+  // Desglose método de pago y tarjeta centro
+  DesglosePorMetodoPagoDto,
+  ResumenTarjetaCentroDto,
 } from './cobros.dto';
 export { CobroSocioDto, RegistrarCobroGrupalDto } from './registrar-cobro-grupal.dto';

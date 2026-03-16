@@ -48,6 +48,7 @@ describe('GruposFamiliaresService', () => {
             find: jest.fn(),
             findOne: jest.fn(),
             save: jest.fn(),
+            update: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
         },
@@ -162,6 +163,7 @@ describe('GruposFamiliaresService', () => {
       const mockQueryBuilder = {
         leftJoin: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
@@ -186,6 +188,7 @@ describe('GruposFamiliaresService', () => {
       const mockQueryBuilder = {
         leftJoin: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
@@ -431,14 +434,18 @@ describe('GruposFamiliaresService', () => {
       jest
         .spyOn(socioRepository, 'findOne')
         .mockResolvedValue(mockSocio as Socio);
-      jest.spyOn(socioRepository, 'save').mockResolvedValue({
-        ...mockSocio,
-        grupoFamiliar: undefined,
-      } as Socio);
+      jest.spyOn(socioRepository, 'update').mockResolvedValue({
+        affected: 1,
+        generatedMaps: [],
+        raw: [],
+      });
 
       await service.desasignarSocio(1);
 
-      expect(socioRepository.save).toHaveBeenCalled();
+      expect(socioRepository.update).toHaveBeenCalledWith(
+        { id: 1 },
+        { grupoFamiliar: null },
+      );
     });
 
     it('debería lanzar error si el socio no existe', async () => {

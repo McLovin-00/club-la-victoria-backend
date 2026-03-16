@@ -24,7 +24,23 @@ enum VariablesEntorno {
   TARJETA_CENTRO_PREFIX = 'TARJETA_CENTRO_PREFIX',
   TARJETA_CENTRO_EMISOR = 'TARJETA_CENTRO_EMISOR',
   TARJETA_CENTRO_NOMBRE = 'TARJETA_CENTRO_NOMBRE',
+  TARJETA_CENTRO_EXTENSION_DEFAULT = 'TARJETA_CENTRO_EXTENSION_DEFAULT',
+  TARJETA_CENTRO_PERIOD_CONFIG = 'TARJETA_CENTRO_PERIOD_CONFIG',
+  TARJETA_CENTRO_FALLBACK_HEADER_DAY = 'TARJETA_CENTRO_FALLBACK_HEADER_DAY',
+  TARJETA_CENTRO_FALLBACK_TRAILER_DAY = 'TARJETA_CENTRO_FALLBACK_TRAILER_DAY',
+  TARJETA_CENTRO_FALLBACK_MONTH_LETTER_MAP =
+    'TARJETA_CENTRO_FALLBACK_MONTH_LETTER_MAP',
 }
+
+export interface TarjetaCentroPeriodoConfig {
+  fechaCabecera: string;
+  fechaTrailer: string;
+  extensionArchivo: string;
+  codigoPeriodoDetalle?: string;
+  nombreInstitucion?: string;
+}
+
+export type TarjetaCentroMonthLetterMap = Record<string, string>;
 
 @Injectable()
 export class AppConfigService {
@@ -149,7 +165,7 @@ export class AppConfigService {
   getTarjetaCentroEmisor(): string {
     return this.configService.get<string>(
       VariablesEntorno.TARJETA_CENTRO_EMISOR,
-      '431005001909',
+      '4310050019094',
     );
   }
 
@@ -158,5 +174,86 @@ export class AppConfigService {
       VariablesEntorno.TARJETA_CENTRO_NOMBRE,
       'CLUB DE CAZADORES LA',
     );
+  }
+
+  getTarjetaCentroExtensionDefault(): string {
+    return this.configService.get<string>(
+      VariablesEntorno.TARJETA_CENTRO_EXTENSION_DEFAULT,
+      '23f',
+    );
+  }
+
+  getTarjetaCentroPeriodConfig(): Record<string, TarjetaCentroPeriodoConfig> {
+    const rawConfig = this.configService.get<string>(
+      VariablesEntorno.TARJETA_CENTRO_PERIOD_CONFIG,
+      '{}',
+    );
+
+    try {
+      const parsedConfig: unknown = JSON.parse(rawConfig);
+
+      if (
+        parsedConfig === null ||
+        Array.isArray(parsedConfig) ||
+        typeof parsedConfig !== 'object'
+      ) {
+        throw new Error('La configuracion debe ser un objeto JSON.');
+      }
+
+      return parsedConfig as Record<string, TarjetaCentroPeriodoConfig>;
+    } catch (error) {
+      this.logger.error(
+        'La variable TARJETA_CENTRO_PERIOD_CONFIG no contiene JSON valido.',
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      throw new InternalServerErrorException(
+        'La configuracion operativa de Tarjeta del Centro es invalida.',
+      );
+    }
+  }
+
+  getTarjetaCentroFallbackHeaderDay(): number {
+    return this.configService.get<number>(
+      VariablesEntorno.TARJETA_CENTRO_FALLBACK_HEADER_DAY,
+      22,
+    );
+  }
+
+  getTarjetaCentroFallbackTrailerDay(): number {
+    return this.configService.get<number>(
+      VariablesEntorno.TARJETA_CENTRO_FALLBACK_TRAILER_DAY,
+      23,
+    );
+  }
+
+  getTarjetaCentroFallbackMonthLetterMap(): TarjetaCentroMonthLetterMap {
+    const rawConfig = this.configService.get<string>(
+      VariablesEntorno.TARJETA_CENTRO_FALLBACK_MONTH_LETTER_MAP,
+      '{"01":"e","02":"f","03":"m","04":"b","05":"y","06":"j","07":"l","08":"a","09":"s","10":"o","11":"n","12":"d"}',
+    );
+
+    try {
+      const parsedConfig: unknown = JSON.parse(rawConfig);
+
+      if (
+        parsedConfig === null ||
+        Array.isArray(parsedConfig) ||
+        typeof parsedConfig !== 'object'
+      ) {
+        throw new Error('El mapa de letras debe ser un objeto JSON.');
+      }
+
+      return parsedConfig as TarjetaCentroMonthLetterMap;
+    } catch (error) {
+      this.logger.error(
+        'La variable TARJETA_CENTRO_FALLBACK_MONTH_LETTER_MAP no contiene JSON valido.',
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      throw new InternalServerErrorException(
+        'La configuracion fallback de letras de Tarjeta del Centro es invalida.',
+      );
+    }
   }
 }

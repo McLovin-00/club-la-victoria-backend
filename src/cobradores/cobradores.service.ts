@@ -19,6 +19,7 @@ import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.enti
 import {
   ConfigurarComisionCobradorDto,
   RegistrarMovimientoCobradorDto,
+  ActualizarMovimientoCobradorDto,
   VincularCobradorDispositivoDto,
 } from './dto';
 import { CustomError } from '../constants/errors/custom-error';
@@ -102,7 +103,7 @@ export class CobradoresService {
         actorCobro: ActorCobro.COBRADOR,
         fechaHoraServidor: Between(desde, hasta),
       },
-      relations: ['lineas', 'socio', 'metodoPago'],
+      relations: ['lineas', 'lineas.cuota', 'socio', 'metodoPago'],
       order: { fechaHoraServidor: 'DESC' },
     });
 
@@ -153,6 +154,27 @@ export class CobradoresService {
     return this.comisionConfigRepository.save(config);
   }
 
+
+  async obtenerComisionVigente(cobradorId: number) {
+    const configs = await this.comisionConfigRepository.find({
+      where: { cobradorId },
+      order: { vigenteDesde: 'DESC' },
+    });
+
+    const ahora = new Date();
+    const configVigente = configs.find(
+      (cfg) => cfg.vigenteDesde <= ahora,
+    );
+
+    return {
+      cobradorId,
+      porcentaje: configVigente
+        ? normalizeComisionPorcentaje(Number(configVigente.porcentaje)) * 100
+        : 0,
+      vigenteDesde: configVigente?.vigenteDesde ?? null,
+    };
+  }
+
   async calcularComision(cobradorId: number, desde: Date, hasta: Date) {
     const operaciones = await this.operacionRepository.find({
       where: {
@@ -199,9 +221,12 @@ export class CobradoresService {
       relations: [
         'cobroOperacion',
         'cobroOperacion.socio',
+        'cobroOperacion.socio.grupoFamiliar',
         'cobroOperacion.metodoPago',
         'cobroOperacion.lineas',
         'cobroOperacion.lineas.cuota',
+        'cobroOperacion.pagos',
+        'cobroOperacion.pagos.metodoPago',
       ],
       order: { createdAt: 'DESC' },
     });
@@ -228,6 +253,36 @@ export class CobradoresService {
           (linea) => linea.tipoLinea === TipoLineaCobro.CONCEPTO,
         );
 
+        // Agrupar metodos de pago desde los pagos individuales (PagoCuota)
+        const metodosPagoMap = new Map<number, { id: number; nombre: string; monto: number }>();
+        const pagosOperacion = movimiento.cobroOperacion?.pagos ?? [];
+        
+        for (const pago of pagosOperacion) {
+          if (pago.metodoPago) {
+            const existing = metodosPagoMap.get(pago.metodoPago.id);
+            if (existing) {
+              existing.monto += Number(pago.montoPagado);
+            } else {
+              metodosPagoMap.set(pago.metodoPago.id, {
+                id: pago.metodoPago.id,
+                nombre: pago.metodoPago.nombre,
+                monto: Number(pago.montoPagado),
+              });
+            }
+          }
+        }
+        
+        // Si no hay pagos individuales, usar el metodoPago de la operacion como fallback
+        const metodosPago = metodosPagoMap.size > 0 
+          ? Array.from(metodosPagoMap.values())
+          : movimiento.cobroOperacion?.metodoPago
+            ? [{
+                id: movimiento.cobroOperacion.metodoPago.id,
+                nombre: movimiento.cobroOperacion.metodoPago.nombre,
+                monto: Number(movimiento.cobroOperacion.total),
+              }]
+            : [];
+
         const detalleCobro = movimiento.cobroOperacion
           ? {
               fechaHoraCobro: movimiento.cobroOperacion.fechaHoraServidor,
@@ -236,6 +291,12 @@ export class CobradoresService {
                     id: movimiento.cobroOperacion.socio.id,
                     nombre: movimiento.cobroOperacion.socio.nombre,
                     apellido: movimiento.cobroOperacion.socio.apellido,
+                    grupoFamiliar: movimiento.cobroOperacion.socio.grupoFamiliar
+                      ? {
+                          id: movimiento.cobroOperacion.socio.grupoFamiliar.id,
+                          nombre: movimiento.cobroOperacion.socio.grupoFamiliar.nombre,
+                        }
+                      : undefined,
                   }
                 : undefined,
               cuotas: lineasCuota.map((linea) => ({
@@ -248,185 +309,129 @@ export class CobradoresService {
                 descripcion: linea.descripcion,
                 monto: Number(linea.monto),
               })),
-              metodoPago: movimiento.cobroOperacion.metodoPago
-                ? {
-                    id: movimiento.cobroOperacion.metodoPago.id,
-                    nombre: movimiento.cobroOperacion.metodoPago.nombre,
-                  }
-                : undefined,
+              metodosPago,
             }
           : undefined;
 
         return {
-          ...movimiento,
+          id: movimiento.id,
+          tipoMovimiento: movimiento.tipoMovimiento,
+          monto: Number(movimiento.monto),
+          createdAt: movimiento.createdAt,
+          usuarioRegistra: movimiento.usuarioRegistra,
+          observacion: movimiento.observacion,
+          referencia: movimiento.referencia,
           detalleCobro,
         };
       }),
     };
   }
 
-  async registrarPagoACobrador(
-    cobradorId: number,
-    dto: RegistrarMovimientoCobradorDto,
-  ): Promise<CobradorCuentaCorrienteMovimiento> {
-    if (dto.monto <= 0) {
-      throw new CustomError(
-        ERROR_MESSAGES.VALIDATION_ERROR,
-        400,
-        ERROR_CODES.VALIDATION_ERROR,
-      );
-    }
+  async buscarSociosMobile(query: string, limit: number = 20) {
+    const search = query?.trim();
 
-    const movimiento = this.movimientoRepository.create({
-      cobradorId,
-      tipoMovimiento: TipoMovimientoCobrador.PAGO_A_COBRADOR,
-      monto: dto.monto,
-      observacion: dto.observacion,
-      referencia: dto.referencia,
-      usuarioRegistra: dto.usuarioRegistra,
-    });
-
-    return this.movimientoRepository.save(movimiento);
-  }
-
-  async registrarAjuste(
-    cobradorId: number,
-    dto: RegistrarMovimientoCobradorDto,
-  ): Promise<CobradorCuentaCorrienteMovimiento> {
-    if (dto.monto === 0) {
-      throw new CustomError(
-        ERROR_MESSAGES.VALIDATION_ERROR,
-        400,
-        ERROR_CODES.VALIDATION_ERROR,
-      );
-    }
-
-    const movimiento = this.movimientoRepository.create({
-      cobradorId,
-      tipoMovimiento: TipoMovimientoCobrador.AJUSTE,
-      monto: dto.monto,
-      observacion: dto.observacion,
-      referencia: dto.referencia,
-      usuarioRegistra: dto.usuarioRegistra,
-    });
-
-    return this.movimientoRepository.save(movimiento);
-  }
-
-  async buscarSociosMobile(query: string, limit: number = 50) {
-    const term = (query || '').trim();
-    const maxLimit = Math.min(limit, 100); // Cap at 100
-
-    const queryBuilder = this.socioRepository
+    const qb = this.socioRepository
       .createQueryBuilder('socio')
-      .leftJoin('socio.grupoFamiliar', 'grupo')
-      .leftJoin('socio.cuotas', 'cuota', 'cuota.estado = :pendiente', {
-        pendiente: EstadoCuota.PENDIENTE,
-      })
-      .where('socio.estado IN (:...estados)', {
-        estados: ['ACTIVO', 'MOROSO'],
-      })
+      .leftJoin('socio.grupoFamiliar', 'grupoFamiliar')
+      .leftJoin(
+        'socio.cuotas',
+        'cuotaPendiente',
+        'cuotaPendiente.estado = :estadoPendiente',
+        { estadoPendiente: EstadoCuota.PENDIENTE },
+      )
+      .where('socio.estado IN (:...estados)', { estados: ['ACTIVO', 'MOROSO'] })
       .select('socio.id', 'id')
       .addSelect('socio.nombre', 'nombre')
       .addSelect('socio.apellido', 'apellido')
       .addSelect('socio.dni', 'dni')
       .addSelect('socio.telefono', 'telefono')
       .addSelect('socio.estado', 'estado')
-      .addSelect('grupo.id', 'grupoFamiliarId')
-      .addSelect('grupo.nombre', 'grupoFamiliarNombre')
-      .addSelect('COUNT(cuota.id)', 'cantidadCuotasPendientes')
+      .addSelect('grupoFamiliar.id', 'grupoFamiliarId')
+      .addSelect('grupoFamiliar.nombre', 'grupoFamiliarNombre')
+      .addSelect('COUNT(DISTINCT cuotaPendiente.id)', 'cantidadCuotasPendientes')
       .groupBy('socio.id')
-      .addGroupBy('socio.nombre')
-      .addGroupBy('socio.apellido')
-      .addGroupBy('socio.dni')
-      .addGroupBy('socio.telefono')
-      .addGroupBy('socio.estado')
-      .addGroupBy('grupo.id')
-      .addGroupBy('grupo.nombre')
+      .addGroupBy('grupoFamiliar.id')
+      .addGroupBy('grupoFamiliar.nombre')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
-      .limit(maxLimit);
+      .limit(limit);
 
-    if (term) {
-      queryBuilder.andWhere(
-        'socio.nombre ILIKE :term OR socio.apellido ILIKE :term OR socio.dni ILIKE :term',
-        {
-          term: `%${term}%`,
-        },
+    if (search) {
+      qb.andWhere(
+        '(unaccent(socio.nombre) ILIKE unaccent(:term) OR unaccent(socio.apellido) ILIKE unaccent(:term) OR socio.dni LIKE :term)',
+        { term: `%${search}%` },
       );
     }
 
-    const socios = await queryBuilder.getRawMany();
+    const rows = await qb.getRawMany();
 
-    return socios.map((socio) => ({
-      id: Number(socio.id),
-      nombre: socio.nombre,
-      apellido: socio.apellido,
-      dni: socio.dni ?? undefined,
-      telefono: socio.telefono ?? undefined,
-      estado: socio.estado,
-      cantidadCuotasPendientes: Number(socio.cantidadCuotasPendientes),
-      grupoFamiliar: socio.grupoFamiliarId
+    return rows.map((row) => ({
+      id: Number(row.id),
+      nombre: row.nombre,
+      apellido: row.apellido,
+      dni: row.dni,
+      telefono: row.telefono ?? undefined,
+      estado: row.estado,
+      cantidadCuotasPendientes: Number(row.cantidadCuotasPendientes ?? 0),
+      grupoFamiliar: row.grupoFamiliarId
         ? {
-            id: Number(socio.grupoFamiliarId),
-            nombre: socio.grupoFamiliarNombre,
+            id: Number(row.grupoFamiliarId),
+            nombre: row.grupoFamiliarNombre,
           }
         : undefined,
     }));
   }
 
   async cuotasPendientesSocioMobile(socioId: number) {
-    return this.cuotaRepository.find({
+    const cuotas = await this.cuotaRepository.find({
       where: { socioId, estado: EstadoCuota.PENDIENTE },
       order: { periodo: 'ASC' },
     });
+
+    return cuotas.map((cuota) => ({
+      id: cuota.id,
+      periodo: cuota.periodo,
+      monto: Number(cuota.monto),
+      estado: cuota.estado,
+    }));
   }
 
-  // ======================
-  // GRUPOS FAMILIARES MOBILE
-  // ======================
-
-  /**
-   * Obtiene todos los grupos familiares con resumen de miembros y deudas
-   * para la app móvil de cobranzas
-   */
   async getGruposFamiliaresMobile() {
-    const grupos = await this.grupoFamiliarRepository
+    const rows = await this.grupoFamiliarRepository
       .createQueryBuilder('grupo')
       .leftJoin('grupo.socios', 'socio')
-      .leftJoin('socio.cuotas', 'cuota', 'cuota.estado = :pendiente', {
-        pendiente: EstadoCuota.PENDIENTE,
-      })
+      .leftJoin(
+        'socio.cuotas',
+        'cuotaPendiente',
+        'cuotaPendiente.estado = :estadoPendiente',
+        { estadoPendiente: EstadoCuota.PENDIENTE },
+      )
       .select('grupo.id', 'id')
       .addSelect('grupo.nombre', 'nombre')
       .addSelect('grupo.descripcion', 'descripcion')
       .addSelect('grupo.orden', 'orden')
       .addSelect('COUNT(DISTINCT socio.id)', 'cantidadMiembros')
       .addSelect(
-        'COUNT(DISTINCT CASE WHEN cuota.id IS NOT NULL THEN socio.id END)',
+        'COUNT(DISTINCT CASE WHEN cuotaPendiente.id IS NOT NULL THEN socio.id END)',
         'miembrosConDeuda',
       )
-      .addSelect('COALESCE(SUM(cuota.monto), 0)', 'totalPendiente')
+      .addSelect('COALESCE(SUM(cuotaPendiente.monto), 0)', 'totalPendiente')
       .groupBy('grupo.id')
       .orderBy('grupo.orden', 'ASC')
       .addOrderBy('grupo.nombre', 'ASC')
       .getRawMany();
 
-    return grupos.map((g) => ({
-      id: g.id,
-      nombre: g.nombre,
-      descripcion: g.descripcion,
-      orden: g.orden,
-      cantidadMiembros: Number(g.cantidadMiembros),
-      miembrosConDeuda: Number(g.miembrosConDeuda),
-      totalPendiente: Number(g.totalPendiente),
+    return rows.map((row) => ({
+      id: Number(row.id),
+      nombre: row.nombre,
+      descripcion: row.descripcion ?? undefined,
+      orden: Number(row.orden ?? 0),
+      cantidadMiembros: Number(row.cantidadMiembros ?? 0),
+      miembrosConDeuda: Number(row.miembrosConDeuda ?? 0),
+      totalPendiente: Number(row.totalPendiente ?? 0),
     }));
   }
 
-  /**
-   * Obtiene el detalle de un grupo familiar con todos sus miembros
-   * y sus cuotas pendientes para la app móvil
-   */
   async getGrupoFamiliarMobile(grupoId: number) {
     const grupo = await this.grupoFamiliarRepository.findOne({
       where: { id: grupoId },
@@ -440,61 +445,42 @@ export class CobradoresService {
       );
     }
 
-    // Obtener miembros con sus cuotas pendientes
-    const miembros = await this.socioRepository
+    const miembrosRaw = await this.socioRepository
       .createQueryBuilder('socio')
-      .leftJoinAndSelect('socio.grupoFamiliar', 'grupo')
-      .leftJoin('socio.cuotas', 'cuota', 'cuota.estado = :pendiente', {
-        pendiente: EstadoCuota.PENDIENTE,
-      })
-      .where('socio.grupoFamiliar = :grupoId', { grupoId })
-      .andWhere('socio.estado IN (:...estados)', {
-        estados: ['ACTIVO', 'MOROSO'],
-      })
+      .leftJoin(
+        'socio.cuotas',
+        'cuotaPendiente',
+        'cuotaPendiente.estado = :estadoPendiente',
+        { estadoPendiente: EstadoCuota.PENDIENTE },
+      )
       .select('socio.id', 'id')
       .addSelect('socio.nombre', 'nombre')
       .addSelect('socio.apellido', 'apellido')
       .addSelect('socio.dni', 'dni')
       .addSelect('socio.telefono', 'telefono')
-      .addSelect('COUNT(cuota.id)', 'cantidadCuotasPendientes')
-      .addSelect('COALESCE(SUM(cuota.monto), 0)', 'totalPendiente')
+      .addSelect('COUNT(DISTINCT cuotaPendiente.id)', 'cantidadCuotasPendientes')
+      .addSelect('COALESCE(SUM(cuotaPendiente.monto), 0)', 'totalPendiente')
+      .where('socio.id_grupo_familiar = :grupoId', { grupoId })
       .groupBy('socio.id')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .getRawMany();
 
-    // Para cada miembro con deuda, obtener el detalle de cuotas
-    const miembrosConCuotas = await Promise.all(
-      miembros.map(async (m) => {
-        let cuotasPendientes: Array<{
-          id: number;
-          periodo: string;
-          monto: number;
-        }> = [];
+    const miembros = miembrosRaw.map((row) => ({
+      id: Number(row.id),
+      nombre: row.nombre,
+      apellido: row.apellido,
+      dni: row.dni,
+      telefono: row.telefono ?? undefined,
+      cantidadCuotasPendientes: Number(row.cantidadCuotasPendientes ?? 0),
+      totalPendiente: Number(row.totalPendiente ?? 0),
+    }));
 
-        if (Number(m.cantidadCuotasPendientes) > 0) {
-          cuotasPendientes = await this.cuotaRepository.find({
-            where: { socioId: m.id, estado: EstadoCuota.PENDIENTE },
-            select: ['id', 'periodo', 'monto'],
-            order: { periodo: 'ASC' },
-          });
-        }
-
-        return {
-          id: m.id,
-          nombre: m.nombre,
-          apellido: m.apellido,
-          dni: m.dni,
-          telefono: m.telefono,
-          cantidadCuotasPendientes: Number(m.cantidadCuotasPendientes),
-          totalPendiente: Number(m.totalPendiente),
-          cuotasPendientes,
-        };
-      }),
-    );
-
-    const totalPendienteGrupo = miembrosConCuotas.reduce(
-      (acc, m) => acc + m.totalPendiente,
+    const miembrosConDeuda = miembros.filter(
+      (miembro) => miembro.cantidadCuotasPendientes > 0,
+    ).length;
+    const totalPendiente = miembros.reduce(
+      (acumulado, miembro) => acumulado + miembro.totalPendiente,
       0,
     );
 
@@ -504,10 +490,106 @@ export class CobradoresService {
       descripcion: grupo.descripcion,
       orden: grupo.orden,
       cantidadMiembros: miembros.length,
-      miembrosConDeuda: miembros.filter((m) => m.cantidadCuotasPendientes > 0)
-        .length,
-      totalPendiente: totalPendienteGrupo,
-      miembros: miembrosConCuotas,
+      miembrosConDeuda,
+      totalPendiente,
+      miembros,
     };
+  }
+
+  async registrarPagoACobrador(
+    cobradorId: number,
+    dto: RegistrarMovimientoCobradorDto,
+  ) {
+    if (!dto.monto || dto.monto <= 0) {
+      throw new CustomError(
+        'El monto debe ser mayor a cero',
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const movimiento = this.movimientoRepository.create({
+      cobradorId,
+      tipoMovimiento: TipoMovimientoCobrador.PAGO_A_COBRADOR,
+      monto: dto.monto,
+      usuarioRegistra: dto.usuarioRegistra,
+      observacion: dto.observacion,
+      referencia: dto.referencia,
+    });
+
+    return this.movimientoRepository.save(movimiento);
+  }
+
+  async registrarAjuste(cobradorId: number, dto: RegistrarMovimientoCobradorDto) {
+    if (!dto.monto || dto.monto === 0) {
+      throw new CustomError(
+        'El monto del ajuste no puede ser cero',
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    const movimiento = this.movimientoRepository.create({
+      cobradorId,
+      tipoMovimiento: TipoMovimientoCobrador.AJUSTE,
+      monto: dto.monto,
+      usuarioRegistra: dto.usuarioRegistra,
+      observacion: dto.observacion,
+      referencia: dto.referencia,
+    });
+
+    return this.movimientoRepository.save(movimiento);
+  }
+
+  async actualizarPago(
+    cobradorId: number,
+    movimientoId: number,
+    dto: ActualizarMovimientoCobradorDto,
+  ) {
+    const movimiento = await this.movimientoRepository.findOne({
+      where: {
+        id: movimientoId,
+        cobradorId,
+        tipoMovimiento: TipoMovimientoCobrador.PAGO_A_COBRADOR,
+      },
+    });
+
+    if (!movimiento) {
+      throw new CustomError(
+        'Pago no encontrado',
+        404,
+        ERROR_CODES.REGISTRO_NOT_FOUND,
+      );
+    }
+
+    // Verificar que no tenga detalle de cobro asociado (solo pagos manuales)
+    if (movimiento.cobroOperacionId) {
+      throw new CustomError(
+        'No se puede modificar un pago que tiene operaciones de cobro asociadas',
+        400,
+        ERROR_CODES.VALIDATION_ERROR,
+      );
+    }
+
+    if (dto.monto !== undefined) {
+      if (dto.monto <= 0) {
+        throw new CustomError(
+          'El monto debe ser mayor a cero',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+      movimiento.monto = dto.monto;
+    }
+
+    if (dto.referencia !== undefined) {
+      movimiento.referencia = dto.referencia;
+    }
+
+    if (dto.usuarioRegistra) {
+      movimiento.usuarioRegistra = dto.usuarioRegistra;
+    }
+
+    return this.movimientoRepository.save(movimiento);
   }
 }

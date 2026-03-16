@@ -3,4 +3,5 @@ export {
   ConfigurarComisionCobradorDto,
   RegistrarMovimientoCobradorDto,
   RangoFechasDto,
+  ActualizarMovimientoCobradorDto,
 } from './cobradores.dto';

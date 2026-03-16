@@ -42,6 +42,7 @@ import { AUTH } from './constants/auth.constants';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { CategoriaSocioJob } from './jobs/categoria-socio.job';
 import { CategoriaRulesService } from './socios/services/categoria-rules.service';
+import { DatabaseExtensionsService } from './database/database-extensions.service';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { CategoriaRulesService } from './socios/services/categoria-rules.service
     },
     CategoriaRulesService,
     CategoriaSocioJob,
+    DatabaseExtensionsService,
   ],
 })
 export class AppModule implements NestModule {

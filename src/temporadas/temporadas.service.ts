@@ -217,8 +217,8 @@ export class TemporadasService {
     // Add search filter if provided
     if (search && search.trim()) {
       queryBuilder.andWhere(
-        '(LOWER(socio.nombre) LIKE LOWER(:search) OR LOWER(socio.apellido) LIKE LOWER(:search) OR socio.dni LIKE :search OR LOWER(socio.email) LIKE LOWER(:search))',
-        { search: `%${search.trim()}%}` },
+        '(unaccent(socio.nombre) ILIKE unaccent(:search) OR unaccent(socio.apellido) ILIKE unaccent(:search) OR socio.dni ILIKE :search OR unaccent(socio.email) ILIKE unaccent(:search))',
+        { search: `%${search.trim()}%` },
       );
     }
 

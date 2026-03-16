@@ -99,3 +99,33 @@ export class RangoFechasDto {
   @IsDateString()
   hasta!: string;
 }
+
+export class ActualizarMovimientoCobradorDto {
+  @ApiProperty({
+    description: 'Monto del movimiento',
+    required: false,
+    example: 50000,
+  })
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  monto?: number;
+
+  @ApiProperty({
+    description: 'Usuario que registra el movimiento',
+    required: false,
+    example: 'operador_admin',
+  })
+  @IsOptional()
+  @IsString()
+  usuarioRegistra?: string;
+
+  @ApiProperty({
+    description: 'Referencia de control',
+    required: false,
+    example: 'REC-2026-0001',
+  })
+  @IsOptional()
+  @IsString()
+  referencia?: string;
+}

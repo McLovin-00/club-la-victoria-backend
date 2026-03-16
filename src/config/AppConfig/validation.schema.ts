@@ -30,6 +30,16 @@ export const configValidationSchema = Joi.object({
 
   // Tarjeta del Centro 23f
   TARJETA_CENTRO_PREFIX: Joi.string().default('C0019094'),
-  TARJETA_CENTRO_EMISOR: Joi.string().length(12).default('431005001909'),
-  TARJETA_CENTRO_NOMBRE: Joi.string().max(30).default('CLUB DE CAZADORES LA'),
+  TARJETA_CENTRO_EMISOR: Joi.string().length(13).default('4310050019094'),
+  TARJETA_CENTRO_NOMBRE: Joi.string().max(22).default('CLUB DE CAZADORES LA'),
+  TARJETA_CENTRO_EXTENSION_DEFAULT: Joi.string()
+    .alphanum()
+    .length(3)
+    .default('23f'),
+  TARJETA_CENTRO_PERIOD_CONFIG: Joi.string().default('{}'),
+  TARJETA_CENTRO_FALLBACK_HEADER_DAY: Joi.number().integer().min(1).max(31).default(22),
+  TARJETA_CENTRO_FALLBACK_TRAILER_DAY: Joi.number().integer().min(1).max(31).default(23),
+  TARJETA_CENTRO_FALLBACK_MONTH_LETTER_MAP: Joi.string().default(
+    '{"01":"e","02":"f","03":"m","04":"b","05":"y","06":"j","07":"l","08":"a","09":"s","10":"o","11":"n","12":"d"}',
+  ),
 });

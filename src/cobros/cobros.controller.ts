@@ -316,11 +316,16 @@ export class CobrosController {
     }
 
     const normalized = value.trim().toLowerCase();
-    if (normalized === 'true') {
+    if (
+      normalized === 'true' ||
+      normalized === '1' ||
+      normalized === 'si' ||
+      normalized === 'sí'
+    ) {
       return true;
     }
 
-    if (normalized === 'false') {
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') {
       return false;
     }
 
@@ -345,8 +350,11 @@ export class CobrosController {
   })
   @ApiResponse({ status: 200, description: 'Lista de socios elegibles' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  obtenerSociosElegibles(@Query('periodo') periodo: string) {
-    return this.cobrosService.getSociosElegibles(periodo);
+  obtenerSociosElegibles(
+    @Query('periodo') periodo: string,
+    @Query('busqueda') busqueda?: string,
+  ) {
+    return this.cobrosService.getSociosElegibles(periodo, busqueda);
   }
 
   // ==================== GENERACIÓN CON SELECCIÓN ====================
@@ -379,7 +387,12 @@ export class CobrosController {
   })
   @ApiResponse({ status: 200, description: 'Estado de pagos obtenido' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  obtenerEstadoPagos(@Query() query: EstadoPagosQueryDto) {
+  obtenerEstadoPagos(
+    @Query() query: EstadoPagosQueryDto,
+    @Query('tarjetaCentro') tarjetaCentroRaw?: string,
+  ) {
+    const tarjetaCentro = this.parseTarjetaCentroQueryParam(tarjetaCentroRaw);
+
     return this.cobrosService.getEstadoPagos(
       query.anio,
       query.page || 1,
@@ -389,6 +402,7 @@ export class CobrosController {
         mes: query.mes,
         estadoPago: query.estadoPago || 'TODOS',
         categoriaSocio: query.categoriaSocio || 'TODOS',
+        tarjetaCentro,
       },
     );
   }
@@ -620,7 +634,6 @@ export class CobrosController {
   }
 
   @Post('pagos/operacion-grupal')
-  @Private()
   @ApiOperation({
     summary: 'Registrar operación de cobro grupal familiar',
     description:

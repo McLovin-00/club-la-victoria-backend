@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import {
 import { Private } from '../common/decorators/private.decorator';
 import { CobradoresService } from './cobradores.service';
 import {
+  ActualizarMovimientoCobradorDto,
   ConfigurarComisionCobradorDto,
   RangoFechasDto,
   RegistrarMovimientoCobradorDto,
@@ -106,6 +108,14 @@ export class CobradoresController {
     return this.cobradoresService.configurarComision(cobradorId, dto);
   }
 
+
+  @Get(':id/comision/vigente')
+  @Private()
+  @ApiOperation({ summary: 'Obtener la comisión vigente actual del cobrador' })
+  obtenerComisionVigente(@Param('id', ParseIntPipe) cobradorId: number) {
+    return this.cobradoresService.obtenerComisionVigente(cobradorId);
+  }
+
   @Get(':id/comision/resumen')
   @Private()
   @ApiOperation({ summary: 'Calcular resumen de comisión por rango' })
@@ -147,5 +157,16 @@ export class CobradoresController {
     @Body() dto: RegistrarMovimientoCobradorDto,
   ) {
     return this.cobradoresService.registrarAjuste(cobradorId, dto);
+  }
+
+  @Patch(':id/cuenta-corriente/pagos/:movimientoId')
+  @Private()
+  @ApiOperation({ summary: 'Actualizar pago al cobrador' })
+  actualizarPago(
+    @Param('id', ParseIntPipe) cobradorId: number,
+    @Param('movimientoId', ParseIntPipe) movimientoId: number,
+    @Body() dto: ActualizarMovimientoCobradorDto,
+  ) {
+    return this.cobradoresService.actualizarPago(cobradorId, movimientoId, dto);
   }
 }

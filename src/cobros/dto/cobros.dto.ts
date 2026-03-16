@@ -652,6 +652,37 @@ export class EstadoPagosQueryDto {
   @IsOptional()
   @IsEnum(['TODOS', 'ACTIVO', 'ADHERENTE'])
   categoriaSocio?: 'TODOS' | 'ACTIVO' | 'ADHERENTE';
+
+  @ApiProperty({
+    description: 'Filtro por tarjeta del centro',
+    required: false,
+    example: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (
+      value === true ||
+      value === 'true' ||
+      value === 1 ||
+      value === '1' ||
+      value === 'si' ||
+      value === 'sí'
+    ) {
+      return true;
+    }
+    if (
+      value === false ||
+      value === 'false' ||
+      value === 0 ||
+      value === '0' ||
+      value === 'no'
+    ) {
+      return false;
+    }
+    return undefined;
+  })
+  @IsBoolean()
+  tarjetaCentro?: boolean;
 }
 
 export class SocioPagosAnualDto {
@@ -692,11 +723,33 @@ export class SocioPagosAnualDto {
   estado!: string;
 
   @ApiProperty({
+    description: 'Indica si el socio tiene Tarjeta del Centro',
+    example: true,
+  })
+  @IsBoolean()
+  tarjetaCentro!: boolean;
+
+  @ApiProperty({
     description:
       'Estado de pago por mes (01-12). Valor: "PAGADA", "PENDIENTE" o null (sin cuota)',
     example: { '01': 'PAGADA', '02': 'PENDIENTE', '03': null },
   })
   meses!: Record<string, string | null>;
+
+  @ApiProperty({
+    description:
+      'Estado de Tarjeta del Centro por mes (01-12). Solo aplica a socios con tarjeta y cuota generada en ese mes.',
+    required: false,
+    example: {
+      '01': 'TARJETA_APROBADA',
+      '02': 'TARJETA_RECHAZADA_PENDIENTE',
+      '03': 'TARJETA_RECHAZADA_PAGADA',
+      '04': 'TARJETA_PENDIENTE_RESPUESTA',
+      '05': null,
+    },
+  })
+  @IsOptional()
+  mesesTarjetaCentro?: Record<string, string | null>;
 }
 
 export class EstadoPagosResponseDto {
@@ -1070,6 +1123,42 @@ export class ReporteCobranzaMesDto {
   morosidad!: number;
 }
 
+export class DesglosePorMetodoPagoDto {
+  @ApiProperty({ description: 'Nombre del método de pago', example: 'Efectivo' })
+  @IsString()
+  metodoPago!: string;
+
+  @ApiProperty({ description: 'Total cobrado con este método', example: 125000 })
+  @IsNumber()
+  totalCobrado!: number;
+
+  @ApiProperty({ description: 'Cantidad de pagos con este método', example: 15 })
+  @IsInt()
+  cantidadPagos!: number;
+}
+
+export class ResumenTarjetaCentroDto {
+  @ApiProperty({ description: 'Cantidad de socios con tarjeta del centro', example: 20 })
+  @IsInt()
+  sociosConTarjeta!: number;
+
+  @ApiProperty({ description: 'Cuotas pagadas por tarjeta del centro', example: 18 })
+  @IsInt()
+  cuotasPagadasTarjeta!: number;
+
+  @ApiProperty({ description: 'Total cobrado por tarjeta del centro', example: 90000 })
+  @IsNumber()
+  totalCobradoTarjeta!: number;
+
+  @ApiProperty({ description: 'Cuotas pendientes de tarjeta del centro', example: 2 })
+  @IsInt()
+  cuotasPendientesTarjeta!: number;
+
+  @ApiProperty({ description: 'Total pendiente de tarjeta del centro', example: 10000 })
+  @IsNumber()
+  totalPendienteTarjeta!: number;
+}
+
 export class ReporteCobranzaRangoResponseDto {
   @ApiProperty({ description: 'Período inicial', example: '2026-01' })
   @IsString()
@@ -1113,4 +1202,17 @@ export class ReporteCobranzaRangoResponseDto {
   })
   @IsArray()
   meses!: ReporteCobranzaMesDto[];
+
+  @ApiProperty({
+    description: 'Desglose por método de pago consolidado',
+    type: [DesglosePorMetodoPagoDto],
+  })
+  @IsArray()
+  desglosePorMetodoPago!: DesglosePorMetodoPagoDto[];
+
+  @ApiProperty({
+    description: 'Resumen de Tarjeta del Centro consolidado',
+    type: ResumenTarjetaCentroDto,
+  })
+  tarjetaCentro!: ResumenTarjetaCentroDto;
 }
