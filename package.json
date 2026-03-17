@@ -23,7 +23,14 @@
     "seed2": "ts-node src/seed.ts -- --seed2",
     "db:clear": "ts-node src/seed.ts -- --clear-db",
     "seed:e2e": "npm run seed:dev",
-    "seed:prod": "ts-node src/seed.ts -- --prod"
+    "seed:prod": "ts-node src/seed.ts -- --prod",
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js --dataSource data-source.ts",
+    "migration:generate": "npm run typeorm -- migration:generate",
+    "migration:create": "npm run typeorm -- migration:create",
+    "migration:run": "npm run typeorm -- migration:run",
+    "migration:run:prod": "node ./node_modules/typeorm/cli.js migration:run --dataSource dist/data-source.js",
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:show": "npm run typeorm -- migration:show"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
