@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { format } from 'date-fns-tz';
 import {
   AppConfigService,
   TarjetaCentroMonthLetterMap,
   TarjetaCentroPeriodoConfig,
 } from '../../config/AppConfig/app-config.service';
+import { TIMEZONE } from '../../constants/time-zone';
 import { Cuota } from '../entities/cuota.entity';
 
 interface TarjetaCentro23fDetalle {
@@ -51,14 +53,14 @@ export class TarjetaCentro23fService {
     const content = this.generarArchivoCompleto(cuotas, opcionesNormalizadas);
 
     return {
-      fileName: this.generarNombreArchivo(opcionesNormalizadas.extensionArchivo),
+      fileName: this.generarNombreArchivo(),
       content,
     };
   }
 
-  generarNombreArchivo(extensionArchivo: string): string {
+  generarNombreArchivo(fechaDescarga = new Date()): string {
     const prefijoArchivo = this.appConfigService.getTarjetaCentroPrefix();
-    return `${prefijoArchivo}.${this.normalizarExtensionArchivo(extensionArchivo)}`;
+    return `${prefijoArchivo}.${this.generarExtensionArchivoDescarga(fechaDescarga)}`;
   }
 
   generarCabecera(fechaCabecera: string, nombreInstitucion: string): string {
@@ -317,6 +319,21 @@ export class TarjetaCentro23fService {
     return this.normalizarExtensionArchivo(
       `${String(trailerDay).padStart(2, '0')}${monthLetter}`,
     );
+  }
+
+  private generarExtensionArchivoDescarga(fechaDescarga: Date): string {
+    const diaDescarga = format(fechaDescarga, 'dd', {
+      timeZone: TIMEZONE,
+    });
+    const mesDescarga = format(fechaDescarga, 'MM', {
+      timeZone: TIMEZONE,
+    });
+    const monthLetter = this.resolverLetraMesFallback(
+      mesDescarga,
+      this.appConfigService.getTarjetaCentroFallbackMonthLetterMap(),
+    );
+
+    return this.normalizarExtensionArchivo(`${diaDescarga}${monthLetter}`);
   }
 
   private resolverLetraMesFallback(

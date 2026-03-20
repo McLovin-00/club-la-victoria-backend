@@ -1837,6 +1837,10 @@ export class CobrosService {
       .leftJoinAndSelect('socio.grupoFamiliar', 'grupo')
       .where('cuota.periodo = :periodo', { periodo })
       .andWhere('cuota.estado = :estado', { estado: EstadoCuota.PENDIENTE })
+      .andWhere(
+        '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
+        { tarjetaCentro: false },
+      )
       .orderBy('COALESCE(grupo.orden, 999999)', 'ASC')
       .addOrderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')

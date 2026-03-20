@@ -164,7 +164,7 @@ export class TalonarioPdfService {
     </div>`;
   }
   private generarFilaHtml(cuota: TalonarioData, num: number): string {
-    const nombreCompleto = `${cuota.socioNombre} ${cuota.socioApellido}`.trim();
+    const nombreCompleto = `${cuota.socioApellido}, ${cuota.socioNombre}`.trim();
     const montoFormateado =
       cuota.monto > 0 ? `$${Math.round(cuota.monto)}` : '';
 

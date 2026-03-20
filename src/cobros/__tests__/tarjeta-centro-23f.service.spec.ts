@@ -51,6 +51,15 @@ describe('TarjetaCentro23fService', () => {
 
   const service = new TarjetaCentro23fService(appConfigMock);
 
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-03-13T15:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   const crearSocio = (
     id: number,
     numeroTarjetaCentro: string | undefined,
@@ -111,7 +120,7 @@ describe('TarjetaCentro23fService', () => {
     const archivo = service.generarArchivo('2026-02', [cuota1, cuota2]);
     const lineas = archivo.content.split('\n');
 
-    expect(archivo.fileName).toBe('C0019094.23f');
+    expect(archivo.fileName).toBe('C0019094.13m');
     expect(lineas).toHaveLength(4);
     expect(lineas.every((linea) => linea.length === 85)).toBe(true);
     expect(lineas[0]).toBe(
@@ -139,7 +148,7 @@ describe('TarjetaCentro23fService', () => {
     const archivo = service.generarArchivo('2025-11', [cuota]);
     const lineas = archivo.content.split('\n');
 
-    expect(archivo.fileName).toBe('C0019094.20n');
+    expect(archivo.fileName).toBe('C0019094.13m');
     expect(lineas[0].slice(14, 20)).toBe('201125');
     expect(lineas[1].slice(57, 67)).toBe('000011/251');
     expect(lineas[2].slice(14, 20)).toBe('201125');
@@ -205,10 +214,16 @@ describe('TarjetaCentro23fService', () => {
     const archivo = service.generarArchivo('2026-01', [cuota]);
     const lineas = archivo.content.split('\n');
 
-    expect(archivo.fileName).toBe('C0019094.23e');
+    expect(archivo.fileName).toBe('C0019094.13m');
     expect(lineas[0].slice(14, 20)).toBe('220126');
     expect(lineas[1].slice(57, 67)).toBe('000001/261');
     expect(lineas[2].slice(14, 20)).toBe('230126');
+  });
+
+  it('deberia generar el nombre de archivo segun la fecha actual de Argentina', () => {
+    expect(service.generarNombreArchivo(new Date('2026-03-01T02:30:00.000Z'))).toBe(
+      'C0019094.28f',
+    );
   });
 
   it('deberia fallar si la fecha configurada no coincide con el periodo', () => {

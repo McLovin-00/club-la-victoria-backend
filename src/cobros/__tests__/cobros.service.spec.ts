@@ -1227,4 +1227,40 @@ describe('CobrosService', () => {
       expect(queryBuilder.getMany).toHaveBeenCalled();
     });
   });
+
+  describe('obtenerCuotasParaTalonario', () => {
+    it('debería excluir socios con tarjeta del centro del talonario mensual', async () => {
+      const queryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 1,
+            socioId: 10,
+            socio: {
+              id: 10,
+              tarjetaCentro: false,
+            },
+          },
+        ]),
+      };
+
+      jest
+        .spyOn(cuotaRepository, 'createQueryBuilder')
+        .mockReturnValue(queryBuilder as never);
+
+      const result = await service.obtenerCuotasParaTalonario('2026-04');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(1);
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
+        { tarjetaCentro: false },
+      );
+      expect(queryBuilder.getMany).toHaveBeenCalled();
+    });
+  });
 });

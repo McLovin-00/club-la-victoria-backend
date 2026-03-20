@@ -488,13 +488,13 @@ export class CobrosController {
   @Get('tarjeta-centro/archivo')
   @Private()
   @ApiOperation({
-    summary: 'Descargar archivo Tarjeta del Centro (.23f)',
+    summary: 'Descargar archivo Tarjeta del Centro',
     description:
-      'Genera y descarga el archivo mensual de cobro para socios con tarjeta del centro en formato de ancho fijo.',
+      'Genera y descarga el archivo mensual de cobro para socios con tarjeta del centro en formato de ancho fijo, con nombre basado en la fecha de descarga.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Archivo .23f generado exitosamente',
+    description: 'Archivo de Tarjeta del Centro generado exitosamente',
   })
   @ApiResponse({
     status: 404,
