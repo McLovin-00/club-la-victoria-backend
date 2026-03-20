@@ -32,6 +32,7 @@ async function bootstrap() {
       'Accept',
     ],
     credentials: true,
+    exposedHeaders: ['Content-Disposition'],
   });
 
   app.useGlobalPipes(
