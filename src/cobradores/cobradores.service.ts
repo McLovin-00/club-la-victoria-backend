@@ -333,7 +333,11 @@ export class CobradoresService {
     // Query base para contar total
     const countQb = this.socioRepository
       .createQueryBuilder('socio')
-      .where('socio.estado IN (:...estados)', { estados: ['ACTIVO', 'MOROSO'] });
+      .where('socio.estado IN (:...estados)', { estados: ['ACTIVO', 'MOROSO'] })
+      .andWhere(
+        '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
+        { tarjetaCentro: false },
+      );
 
     if (search) {
       countQb.andWhere(
@@ -355,6 +359,10 @@ export class CobradoresService {
         { estadoPendiente: EstadoCuota.PENDIENTE },
       )
       .where('socio.estado IN (:...estados)', { estados: ['ACTIVO', 'MOROSO'] })
+      .andWhere(
+        '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
+        { tarjetaCentro: false },
+      )
       .select('socio.id', 'id')
       .addSelect('socio.nombre', 'nombre')
       .addSelect('socio.apellido', 'apellido')
@@ -423,7 +431,12 @@ export class CobradoresService {
   async getGruposFamiliaresMobile() {
     const rows = await this.grupoFamiliarRepository
       .createQueryBuilder('grupo')
-      .leftJoin('grupo.socios', 'socio')
+      .leftJoin(
+        'grupo.socios',
+        'socio',
+        '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
+        { tarjetaCentro: false },
+      )
       .leftJoin(
         'socio.cuotas',
         'cuotaPendiente',
@@ -485,6 +498,10 @@ export class CobradoresService {
       .addSelect('COUNT(DISTINCT cuotaPendiente.id)', 'cantidadCuotasPendientes')
       .addSelect('COALESCE(SUM(cuotaPendiente.monto), 0)', 'totalPendiente')
       .where('socio.id_grupo_familiar = :grupoId', { grupoId })
+      .andWhere(
+        '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
+        { tarjetaCentro: false },
+      )
       .groupBy('socio.id')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
