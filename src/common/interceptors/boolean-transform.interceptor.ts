@@ -30,6 +30,8 @@ export class BooleanTransformInterceptor implements NestInterceptor {
     'activo',
     'habilitado',
     'isPrincipal',
+    'tarjetaCentro',
+    'eliminarFotoVieja',
   ]);
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
