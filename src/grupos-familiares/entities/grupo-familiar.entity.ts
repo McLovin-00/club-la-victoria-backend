@@ -6,8 +6,10 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToOne,
 } from 'typeorm';
 import { Socio } from '../../socios/entities/socio.entity';
+import { CreditoGrupal } from '../../credito/entities/credito-grupal.entity';
 
 @Entity('grupo_familiar')
 export class GrupoFamiliar {
@@ -40,4 +42,7 @@ export class GrupoFamiliar {
 
   @OneToMany(() => Socio, (socio) => socio.grupoFamiliar)
   socios!: Socio[];
+
+  @OneToOne(() => CreditoGrupal, (credito) => credito.grupoFamiliar)
+  creditoGrupal?: CreditoGrupal;
 }

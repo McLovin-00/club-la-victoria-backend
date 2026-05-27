@@ -78,11 +78,12 @@ export class TarjetaCentro23fService {
     codigoPeriodoDetalle: string,
   ): string {
     const tarjeta = this.normalizarTarjeta(detalle.tarjeta);
-    const numeroAfiliado = this.normalizarNumeroAfiliado(detalle.numeroAfiliado);
-    const importeDetalle = this.calcularImporteDetalle(detalle.montoReal);
-    const codigoPeriodoNormalizado = this.normalizarCodigoPeriodoDetalle(
-      codigoPeriodoDetalle,
+    const numeroAfiliado = this.normalizarNumeroAfiliado(
+      detalle.numeroAfiliado,
     );
+    const importeDetalle = this.calcularImporteDetalle(detalle.montoReal);
+    const codigoPeriodoNormalizado =
+      this.normalizarCodigoPeriodoDetalle(codigoPeriodoDetalle);
 
     const linea = this.completarConEspaciosDerecha(
       `${TarjetaCentro23fService.CODIGO_CONVENIO}2${tarjeta}${numeroAfiliado}${TarjetaCentro23fService.DETALLE_FIJO_1}${importeDetalle}${codigoPeriodoNormalizado}`,
@@ -232,7 +233,9 @@ export class TarjetaCentro23fService {
       nombreInstitucion: this.normalizarNombreInstitucion(
         opciones.nombreInstitucion,
       ).trimEnd(),
-      extensionArchivo: this.normalizarExtensionArchivo(opciones.extensionArchivo),
+      extensionArchivo: this.normalizarExtensionArchivo(
+        opciones.extensionArchivo,
+      ),
     };
   }
 
@@ -311,9 +314,11 @@ export class TarjetaCentro23fService {
   }
 
   private generarExtensionArchivoFallback(periodo: string): string {
-    const trailerDay = this.appConfigService.getTarjetaCentroFallbackTrailerDay();
+    const trailerDay =
+      this.appConfigService.getTarjetaCentroFallbackTrailerDay();
     const [, mes] = periodo.split('-');
-    const monthLetterMap = this.appConfigService.getTarjetaCentroFallbackMonthLetterMap();
+    const monthLetterMap =
+      this.appConfigService.getTarjetaCentroFallbackMonthLetterMap();
     const monthLetter = this.resolverLetraMesFallback(mes, monthLetterMap);
 
     return this.normalizarExtensionArchivo(
@@ -361,7 +366,9 @@ export class TarjetaCentro23fService {
       );
     }
 
-    return this.normalizarExtensionArchivo(configuracionPeriodo.extensionArchivo);
+    return this.normalizarExtensionArchivo(
+      configuracionPeriodo.extensionArchivo,
+    );
   }
 
   private normalizarFechaArchivo(fecha: string, etiqueta: string): string {
@@ -518,7 +525,10 @@ export class TarjetaCentro23fService {
   }
 
   private validarCabeceraLinea(linea: string, contexto: string): void {
-    this.normalizarFechaArchivo(linea.slice(14, 20), `${contexto}.fechaCabecera`);
+    this.normalizarFechaArchivo(
+      linea.slice(14, 20),
+      `${contexto}.fechaCabecera`,
+    );
 
     if (linea.slice(42, 45) !== TarjetaCentro23fService.CABECERA_FIJO) {
       throw new BadRequestException(
@@ -568,7 +578,10 @@ export class TarjetaCentro23fService {
   }
 
   private validarTrailerLinea(linea: string, contexto: string): void {
-    this.normalizarFechaArchivo(linea.slice(14, 20), `${contexto}.fechaTrailer`);
+    this.normalizarFechaArchivo(
+      linea.slice(14, 20),
+      `${contexto}.fechaTrailer`,
+    );
 
     if (!/^\d{7}$/.test(linea.slice(20, 27))) {
       throw new BadRequestException(

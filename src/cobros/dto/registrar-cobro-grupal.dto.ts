@@ -53,6 +53,15 @@ export class CobroSocioDto {
 
 export class RegistrarCobroGrupalDto {
   @ApiProperty({
+    description: 'ID del grupo familiar (todos los cobros deben pertenecer a este grupo)',
+    example: 5,
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  grupoId!: number;
+
+  @ApiProperty({
     description: 'Lista de cobros a registrar, uno por socio',
     type: [CobroSocioDto],
     minItems: 1,

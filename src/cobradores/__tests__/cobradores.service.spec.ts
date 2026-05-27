@@ -15,11 +15,13 @@ import { Socio } from '../../socios/entities/socio.entity';
 import { Cuota } from '../../cobros/entities/cuota.entity';
 import { GrupoFamiliar } from '../../grupos-familiares/entities/grupo-familiar.entity';
 import { CustomError } from '../../constants/errors/custom-error';
+import { CreditoService } from '../../credito/credito.service';
 
 describe('CobradoresService', () => {
   let service: CobradoresService;
   let operacionRepository: Repository<CobroOperacion>;
   let movimientoRepository: Repository<CobradorCuentaCorrienteMovimiento>;
+  let socioRepository: Repository<Socio>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -70,6 +72,15 @@ describe('CobradoresService', () => {
             createQueryBuilder: jest.fn(),
           },
         },
+        {
+          provide: CreditoService,
+          useValue: {
+            aplicarCreditoIndividual: jest.fn(),
+            acumularCreditoIndividual: jest.fn(),
+            aplicarCreditoGrupal: jest.fn(),
+            acumularCreditoGrupal: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -78,6 +89,7 @@ describe('CobradoresService', () => {
     movimientoRepository = module.get(
       getRepositoryToken(CobradorCuentaCorrienteMovimiento),
     );
+    socioRepository = module.get(getRepositoryToken(Socio));
   });
 
   afterEach(() => {
@@ -103,6 +115,42 @@ describe('CobradoresService', () => {
     const result = await service.listarCuentaCorriente(1);
 
     expect(result.saldo).toBe(50);
+  });
+
+  it('debería devolver crédito individual vigente en el detalle mobile de socio', async () => {
+    jest.spyOn(socioRepository, 'findOne').mockResolvedValue({
+      id: 42,
+      nombre: 'Juan',
+      apellido: 'Perez',
+      dni: '12345678',
+      telefono: '1122334455',
+      estado: 'ACTIVO',
+      creditoIndividual: { saldo: 2500 },
+      grupoFamiliar: { id: 7, nombre: 'Familia Perez' },
+    } as unknown as Socio);
+
+    const result = await service.obtenerSocioMobile(42);
+
+    expect(result).toEqual({
+      id: 42,
+      nombre: 'Juan',
+      apellido: 'Perez',
+      dni: '12345678',
+      telefono: '1122334455',
+      estado: 'ACTIVO',
+      creditoIndividual: 2500,
+      grupoFamiliar: { id: 7, nombre: 'Familia Perez' },
+    });
+    expect(socioRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 42 },
+      relations: ['creditoIndividual', 'grupoFamiliar'],
+    });
+  });
+
+  it('debería rechazar detalle mobile cuando el socio no existe', async () => {
+    jest.spyOn(socioRepository, 'findOne').mockResolvedValue(null);
+
+    await expect(service.obtenerSocioMobile(999)).rejects.toThrow(CustomError);
   });
 
   it('debería incluir detalle del cobro en movimientos de comisión', async () => {
@@ -166,7 +214,9 @@ describe('CobradoresService', () => {
     const cobradorRepository = service['cobradorRepository'];
     const comisionConfigRepository = service['comisionConfigRepository'];
 
-    jest.spyOn(cobradorRepository, 'findOne').mockResolvedValue({ id: 1 } as Cobrador);
+    jest
+      .spyOn(cobradorRepository, 'findOne')
+      .mockResolvedValue({ id: 1 } as Cobrador);
     jest
       .spyOn(comisionConfigRepository, 'create')
       .mockImplementation((payload) => payload as CobradorComisionConfig);
@@ -226,6 +276,7 @@ describe('CobradoresService', () => {
           grupoFamiliarId: null,
           grupoFamiliarNombre: null,
           cantidadCuotasPendientes: '0',
+          creditoIndividualSaldo: '0', // no individual credit
         },
         {
           id: '2',
@@ -237,6 +288,7 @@ describe('CobradoresService', () => {
           grupoFamiliarId: '10',
           grupoFamiliarNombre: 'Familia Lopez',
           cantidadCuotasPendientes: '5',
+          creditoIndividualSaldo: '2000', // has individual credit
         },
       ];
 
@@ -251,7 +303,9 @@ describe('CobradoresService', () => {
         addOrderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockRows),
+        getCount: jest.fn().mockResolvedValue(2),
       };
 
       jest
@@ -260,7 +314,7 @@ describe('CobradoresService', () => {
 
       const result = await service.buscarSociosMobile('', 50);
 
-      expect(result).toEqual([
+      expect(result.data).toEqual([
         {
           id: 1,
           nombre: 'Juan',
@@ -269,6 +323,7 @@ describe('CobradoresService', () => {
           telefono: undefined,
           estado: 'ACTIVO',
           cantidadCuotasPendientes: 0,
+          creditoIndividual: 0, // no individual credit
           grupoFamiliar: undefined,
         },
         {
@@ -279,12 +334,17 @@ describe('CobradoresService', () => {
           telefono: '11223344',
           estado: 'MOROSO',
           cantidadCuotasPendientes: 5,
+          creditoIndividual: 2000, // has individual credit
           grupoFamiliar: {
             id: 10,
             nombre: 'Familia Lopez',
           },
         },
       ]);
+      expect(result.total).toBe(2);
+      expect(result.limit).toBe(50);
+      expect(result.offset).toBe(50);
+      expect(result.hasMore).toBe(false);
     });
   });
 
@@ -300,6 +360,7 @@ describe('CobradoresService', () => {
           cantidadMiembros: '3',
           miembrosConDeuda: '2',
           totalPendiente: '5000',
+          creditoGrupalSaldo: '1000', // group has credit
         },
         {
           id: 2,
@@ -309,6 +370,7 @@ describe('CobradoresService', () => {
           cantidadMiembros: '2',
           miembrosConDeuda: '0',
           totalPendiente: '0',
+          creditoGrupalSaldo: '0',
         },
       ];
 
@@ -321,6 +383,7 @@ describe('CobradoresService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockGrupos),
@@ -337,7 +400,9 @@ describe('CobradoresService', () => {
       expect(result[0].cantidadMiembros).toBe(3);
       expect(result[0].miembrosConDeuda).toBe(2);
       expect(result[0].totalPendiente).toBe(5000);
+      expect(result[0].creditoGrupal).toBe(1000); // shows group credit in group list
       expect(result[1].miembrosConDeuda).toBe(0);
+      expect(result[1].creditoGrupal).toBe(0);
     });
   });
 
@@ -352,6 +417,7 @@ describe('CobradoresService', () => {
         nombre: 'Familia García',
         descripcion: 'Grupo de prueba',
         orden: 1,
+        creditoGrupal: { saldo: 1000 }, // group has credit
       } as GrupoFamiliar);
 
       const mockMiembros = [
@@ -363,6 +429,7 @@ describe('CobradoresService', () => {
           telefono: '123456',
           cantidadCuotasPendientes: '2',
           totalPendiente: '3000',
+          creditoIndividualSaldo: '500', // Juan has individual credit
         },
         {
           id: 2,
@@ -372,6 +439,7 @@ describe('CobradoresService', () => {
           telefono: null,
           cantidadCuotasPendientes: '0',
           totalPendiente: '0',
+          creditoIndividualSaldo: '0', // María has no credit
         },
       ];
 
@@ -383,6 +451,7 @@ describe('CobradoresService', () => {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         groupBy: jest.fn().mockReturnThis(),
+        addGroupBy: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
         getRawMany: jest.fn().mockResolvedValue(mockMiembros),
@@ -402,7 +471,10 @@ describe('CobradoresService', () => {
       expect(result.cantidadMiembros).toBe(2);
       expect(result.miembrosConDeuda).toBe(1);
       expect(result.totalPendiente).toBe(3000);
+      expect(result.creditoGrupal).toBe(1000); // group credit shown in group detail
       expect(result.miembros).toHaveLength(2);
+      expect(result.miembros[0].creditoIndividual).toBe(500); // member individual credit
+      expect(result.miembros[1].creditoIndividual).toBe(0);
     });
 
     it('debería lanzar error si el grupo no existe', async () => {

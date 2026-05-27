@@ -12,6 +12,7 @@ import { CobradoresController } from './cobradores.controller';
 import { Socio } from '../socios/entities/socio.entity';
 import { Cuota } from '../cobros/entities/cuota.entity';
 import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
+import { CreditoModule } from '../credito/credito.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.enti
       Cuota,
       GrupoFamiliar,
     ]),
+    CreditoModule,
   ],
   controllers: [CobradoresController],
   providers: [CobradoresService],

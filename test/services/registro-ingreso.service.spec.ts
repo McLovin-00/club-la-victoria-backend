@@ -4,7 +4,10 @@ import { RegistroIngresoService } from '../src/registro-ingreso/registro-ingreso
 import { RegistroIngresoGateway } from '../src/registro-ingreso/registro-ingreso.gateway';
 import { getDayStartEnd } from '../src/util/day-start-end-util';
 import { CustomError } from '../src/constants/errors/custom-error';
-import { ERROR_MESSAGES, ERROR_CODES } from '../src/constants/errors/error-messages';
+import {
+  ERROR_MESSAGES,
+  ERROR_CODES,
+} from '../src/constants/errors/error-messages';
 
 describe('RegistroIngresoService', () => {
   let service: RegistroIngresoService;
@@ -44,11 +47,13 @@ describe('RegistroIngresoService', () => {
     }).compile();
 
     service = module.get<RegistroIngresoService>(RegistroIngresoService);
-    registroIngresoRepository =
-      module.get<Repository<unknown>>('REGISTRO_INGRESO_REPOSITORY');
+    registroIngresoRepository = module.get<Repository<unknown>>(
+      'REGISTRO_INGRESO_REPOSITORY',
+    );
     socioRepository = module.get<Repository<unknown>>('SOCIO_REPOSITORY');
-    registroIngresoGateway =
-      module.get<RegistroIngresoGateway>(RegistroIngresoGateway);
+    registroIngresoGateway = module.get<RegistroIngresoGateway>(
+      RegistroIngresoGateway,
+    );
   });
 
   afterEach(() => {

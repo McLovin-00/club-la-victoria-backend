@@ -221,9 +221,9 @@ describe('TarjetaCentro23fService', () => {
   });
 
   it('deberia generar el nombre de archivo segun la fecha actual de Argentina', () => {
-    expect(service.generarNombreArchivo(new Date('2026-03-01T02:30:00.000Z'))).toBe(
-      'C0019094.28f',
-    );
+    expect(
+      service.generarNombreArchivo(new Date('2026-03-01T02:30:00.000Z')),
+    ).toBe('C0019094.28f');
   });
 
   it('deberia fallar si la fecha configurada no coincide con el periodo', () => {
@@ -242,9 +242,9 @@ describe('TarjetaCentro23fService', () => {
       crearSocio(2844, '5047812020817021', true),
     );
 
-    expect(() => serviceConConfigInvalida.generarArchivo('2026-02', [cuota])).toThrow(
-      'fechaCabecera=220326 no coincide con el periodo 2026-02',
-    );
+    expect(() =>
+      serviceConConfigInvalida.generarArchivo('2026-02', [cuota]),
+    ).toThrow('fechaCabecera=220326 no coincide con el periodo 2026-02');
 
     appConfigMock.getTarjetaCentroPeriodConfig = jest.fn(
       () => configuracionPorPeriodo,

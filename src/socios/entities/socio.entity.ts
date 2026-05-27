@@ -1,17 +1,10 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  Index,
-  OneToMany,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Index, OneToMany, ManyToOne, OneToOne, JoinColumn } from 'typeorm';
 import { SocioTemporada } from '../../asociaciones/entities/socio-temporada.entity';
 import { RegistroIngreso } from '../../registro-ingreso/entities/registro-ingreso.entity';
 import { CategoriaSocio } from '../../categorias-socio/entities/categoria-socio.entity';
 import { Cuota } from '../../cobros/entities/cuota.entity';
 import { GrupoFamiliar } from '../../grupos-familiares/entities/grupo-familiar.entity';
+import { CreditoIndividual } from '../../credito/entities/credito-individual.entity';
 @Entity('socio')
 export class Socio {
   @PrimaryGeneratedColumn({ name: 'id_socio' })
@@ -82,4 +75,7 @@ export class Socio {
 
   @OneToMany(() => Cuota, (cuota) => cuota.socio)
   cuotas!: Cuota[];
+
+  @OneToOne(() => CreditoIndividual, (credito) => credito.socio)
+  creditoIndividual?: CreditoIndividual;
 }

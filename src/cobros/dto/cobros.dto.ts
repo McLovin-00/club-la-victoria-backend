@@ -5,6 +5,7 @@ import {
   IsInt,
   IsBoolean,
   Min,
+  Max,
   IsEnum,
   IsOptional,
   IsArray,
@@ -14,6 +15,7 @@ import {
   IsPositive,
   IsDateString,
   Validate,
+  ValidateIf,
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
@@ -21,6 +23,56 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { ActorCobro, OrigenCobro } from '../entities/cobro-operacion.entity';
+
+// ==================== CRÉDITO RESUMEN ====================
+
+export class CreditoResumen {
+  @ApiProperty({ description: 'Crédito disponible antes de aplicar', example: 2000 })
+  @IsNumber()
+  disponible!: number;
+
+  @ApiProperty({ description: 'Monto de crédito aplicado a los cargos', example: 1500 })
+  @IsNumber()
+  aplicado!: number;
+
+  @ApiProperty({ description: 'Crédito generado en esta operación', example: 0 })
+  @IsNumber()
+  generado!: number;
+
+  @ApiProperty({ description: 'Saldo final de crédito después de la operación', example: 500 })
+  @IsNumber()
+  saldoFinal!: number;
+}
+
+/**
+ * Payment summary injected into CobroOperacion responses.
+ * Exposes the credit calculation results alongside the operation totals.
+ */
+export class CobroOperacionCreditoSummary {
+  @ApiProperty({ description: 'Monto total de cargos antes de crédito', example: 5000 })
+  @IsNumber()
+  totalCargos!: number;
+
+  @ApiProperty({ description: 'Crédito individual aplicado a esta operación', example: 1500 })
+  @IsNumber()
+  creditoAplicado!: number;
+
+  @ApiProperty({ description: 'Crédito generado (sobrepago)', example: 0 })
+  @IsNumber()
+  creditoGenerado!: number;
+
+  @ApiProperty({ description: 'Monto neto a cobrar después de aplicar crédito', example: 3000 })
+  @IsNumber()
+  montoACobrar!: number;
+
+  @ApiProperty({ description: 'Crédito disponible en el contexto (individual o grupal)', example: 2000 })
+  @IsNumber()
+  creditoDisponible!: number;
+
+  @ApiProperty({ description: 'Saldo de crédito después de la operación', example: 500 })
+  @IsNumber()
+  saldoCreditoDespues!: number;
+}
 
 export class GenerarCuotasDto {
   @ApiProperty({
@@ -61,6 +113,16 @@ export class RegistrarPagoDto {
   @IsString()
   @IsOptional()
   observaciones?: string;
+
+  @ApiProperty({
+    description: 'Importe abonado por el socio (opcional, por defecto usa el monto de la cuota)',
+    example: 1500,
+    required: false,
+  })
+  @IsNumber()
+  @ValidateIf((_, value) => value !== undefined)
+  @Type(() => Number)
+  montoPagado?: number;
 }
 
 export class RegistrarPagoMultipleDto {
@@ -135,7 +197,7 @@ export class PagoMetodoMontoDto {
   })
   @Type(() => Number)
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   monto!: number;
 }
 
@@ -172,15 +234,16 @@ export class RegistrarOperacionCobroDto {
   @Type(() => ConceptoCobroDto)
   conceptos?: ConceptoCobroDto[];
 
-
   @Validate(function (object: RegistrarOperacionCobroDto) {
     const hasCuotas = object.cuotaIds && object.cuotaIds.length > 0;
     const hasConceptos = object.conceptos && object.conceptos.length > 0;
-    
+
     if (!hasCuotas && !hasConceptos) {
-      throw new Error('Debe incluir al menos una cuota o un concepto en la operación');
+      throw new Error(
+        'Debe incluir al menos una cuota o un concepto en la operación',
+      );
     }
-    
+
     return true;
   })
   private readonly validateAtLeastOneItem?: any;
@@ -251,8 +314,9 @@ export class RegistrarOperacionCobroDto {
   })
   @Type(() => Number)
   @IsNumber()
-  @IsPositive()
-  total!: number;
+  @IsOptional()
+  @Min(0)
+  total?: number;
 
   @ApiProperty({
     description: 'Clave de idempotencia para evitar dobles registros',
@@ -1124,37 +1188,104 @@ export class ReporteCobranzaMesDto {
 }
 
 export class DesglosePorMetodoPagoDto {
-  @ApiProperty({ description: 'Nombre del método de pago', example: 'Efectivo' })
+  @ApiProperty({
+    description: 'Nombre del método de pago',
+    example: 'Efectivo',
+  })
   @IsString()
   metodoPago!: string;
 
-  @ApiProperty({ description: 'Total cobrado con este método', example: 125000 })
+  @ApiProperty({
+    description: 'Total cobrado con este método',
+    example: 125000,
+  })
   @IsNumber()
   totalCobrado!: number;
 
-  @ApiProperty({ description: 'Cantidad de pagos con este método', example: 15 })
+  @ApiProperty({
+    description: 'Cantidad de pagos con este método',
+    example: 15,
+  })
   @IsInt()
   cantidadPagos!: number;
 }
 
+export class PagoAnualDto {
+  @ApiProperty({ description: 'ID del socio', example: 42 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  socioId!: number;
+
+  @ApiProperty({ description: 'Año a pagar', example: 2026 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  anio!: number;
+
+  @ApiProperty({ description: 'ID del método de pago (efectivo o transferencia)', example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  metodoPagoId!: number;
+
+  @ApiProperty({ description: 'Observaciones opcionales', required: false })
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
+}
+
+export class PagoAnualResponseDto {
+  @ApiProperty({ description: 'Cuotas nuevas generadas', example: 7 })
+  cuotasGeneradas!: number;
+
+  @ApiProperty({ description: 'Cuotas marcadas como pagadas', example: 12 })
+  cuotasPagadas!: number;
+
+  @ApiProperty({ description: 'Cuotas que ya estaban pagadas (omitidas)', example: 0 })
+  cuotasYaPagadas!: number;
+
+  @ApiProperty({ description: 'Total pagado', example: 120000 })
+  totalPagado!: number;
+
+  @ApiProperty({ description: 'Períodos pagados', example: ['2026-01', '2026-02'] })
+  periodosPagados!: string[];
+}
+
 export class ResumenTarjetaCentroDto {
-  @ApiProperty({ description: 'Cantidad de socios con tarjeta del centro', example: 20 })
+  @ApiProperty({
+    description: 'Cantidad de socios con tarjeta del centro',
+    example: 20,
+  })
   @IsInt()
   sociosConTarjeta!: number;
 
-  @ApiProperty({ description: 'Cuotas pagadas por tarjeta del centro', example: 18 })
+  @ApiProperty({
+    description: 'Cuotas pagadas por tarjeta del centro',
+    example: 18,
+  })
   @IsInt()
   cuotasPagadasTarjeta!: number;
 
-  @ApiProperty({ description: 'Total cobrado por tarjeta del centro', example: 90000 })
+  @ApiProperty({
+    description: 'Total cobrado por tarjeta del centro',
+    example: 90000,
+  })
   @IsNumber()
   totalCobradoTarjeta!: number;
 
-  @ApiProperty({ description: 'Cuotas pendientes de tarjeta del centro', example: 2 })
+  @ApiProperty({
+    description: 'Cuotas pendientes de tarjeta del centro',
+    example: 2,
+  })
   @IsInt()
   cuotasPendientesTarjeta!: number;
 
-  @ApiProperty({ description: 'Total pendiente de tarjeta del centro', example: 10000 })
+  @ApiProperty({
+    description: 'Total pendiente de tarjeta del centro',
+    example: 10000,
+  })
   @IsNumber()
   totalPendienteTarjeta!: number;
 }
@@ -1215,4 +1346,107 @@ export class ReporteCobranzaRangoResponseDto {
     type: ResumenTarjetaCentroDto,
   })
   tarjetaCentro!: ResumenTarjetaCentroDto;
+}
+
+export class ActualizarOperacionCobroDto {
+  @ApiProperty({
+    description: 'IDs de cuotas a cancelar en la operación',
+    example: [101, 102],
+    type: [Number],
+  })
+  @IsArray()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  cuotaIds!: number[];
+
+  @ApiProperty({
+    description: 'Conceptos no-cuota adicionales de la operación',
+    type: [ConceptoCobroDto],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConceptoCobroDto)
+  conceptos?: ConceptoCobroDto[];
+
+  @Validate(function (object: ActualizarOperacionCobroDto) {
+    const hasCuotas = object.cuotaIds && object.cuotaIds.length > 0;
+    const hasConceptos = object.conceptos && object.conceptos.length > 0;
+
+    if (!hasCuotas && !hasConceptos) {
+      throw new Error(
+        'Debe incluir al menos una cuota o un concepto en la operación',
+      );
+    }
+
+    return true;
+  })
+  private readonly validateAtLeastOneItem?: any;
+
+  @ApiProperty({
+    description: 'ID del método de pago principal (requerido si no se informan pagos)',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  metodoPagoId?: number;
+
+  @ApiProperty({
+    description: 'ID del cobrador que solicita la edición',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  cobradorId?: number;
+
+  @ApiProperty({
+    description: 'Identificador de instalación móvil que solicita la edición',
+    example: 'device-abc123',
+  })
+  @IsString()
+  installationId!: string;
+
+  @ApiProperty({
+    description:
+      'Distribución de importes por método de pago (1 o 2 métodos). Si se informa, reemplaza metodoPagoId.',
+    type: [PagoMetodoMontoDto],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => PagoMetodoMontoDto)
+  pagos?: PagoMetodoMontoDto[];
+
+  @ApiProperty({
+    description: 'Total de la operación (debe coincidir con suma de líneas)',
+    example: 24000,
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  total!: number;
+
+  @ApiProperty({
+    description: 'Referencia externa',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  referencia?: string;
+
+  @ApiProperty({
+    description: 'Observaciones generales',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  observaciones?: string;
 }

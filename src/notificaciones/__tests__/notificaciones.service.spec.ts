@@ -2,15 +2,23 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificacionesService } from '../notificaciones.service';
-import { Notificacion, TipoNotificacion } from '../entities/notificacion.entity';
+import {
+  Notificacion,
+  TipoNotificacion,
+} from '../entities/notificacion.entity';
 import { CustomError } from 'src/constants/errors/custom-error';
-import { ERROR_MESSAGES, ERROR_CODES } from 'src/constants/errors/error-messages';
+import {
+  ERROR_MESSAGES,
+  ERROR_CODES,
+} from 'src/constants/errors/error-messages';
 import { createMockRepositoryWithData } from '../../../test/mocks/repository.mock';
 import { socioFixture } from '../../../test/fixtures/entities/socio.fixture';
 
 describe('NotificacionesService', () => {
   let service: NotificacionesService;
-  let notificacionRepository: jest.Mocked<Repository<Notificacion>> & { data: Notificacion[] };
+  let notificacionRepository: jest.Mocked<Repository<Notificacion>> & {
+    data: Notificacion[];
+  };
 
   // Fixtures para notificaciones
   const notificacionFixture: Notificacion = {
@@ -163,7 +171,9 @@ describe('NotificacionesService', () => {
         notificacionNoLeidaFixture, // más reciente
         notificacionFixture, // más antigua
       ];
-      notificacionRepository.find.mockResolvedValueOnce(notificacionesOrdenadas);
+      notificacionRepository.find.mockResolvedValueOnce(
+        notificacionesOrdenadas,
+      );
 
       // Act
       const result = await service.findAll();
@@ -277,16 +287,19 @@ describe('NotificacionesService', () => {
       };
 
       notificacionRepository.findOne.mockResolvedValueOnce(notificacionNoLeida);
-      notificacionRepository.save.mockImplementationOnce(async (entity: any) => {
-        return { ...entity, leida: true } as Notificacion;
-        return { ...entity, leida: true };
-      });
+      notificacionRepository.save.mockImplementationOnce(
+        async (entity: any) => {
+          return { ...entity, leida: true } as Notificacion;
+          return { ...entity, leida: true };
+        },
+      );
 
       // Act
       await service.marcarLeida(1);
 
       // Assert
-      const savedEntity = (notificacionRepository.save as jest.Mock).mock.calls[0][0];
+      const savedEntity = (notificacionRepository.save as jest.Mock).mock
+        .calls[0][0];
       expect(savedEntity.leida).toBe(true);
       expect(savedEntity.id).toBe(1);
     });
@@ -375,7 +388,8 @@ describe('NotificacionesService', () => {
       await service.marcarTodasLeidas();
 
       // Assert
-      const updateCalls = (notificacionRepository.update as jest.Mock).mock.calls;
+      const updateCalls = (notificacionRepository.update as jest.Mock).mock
+        .calls;
       expect(updateCalls).toHaveLength(1);
       const [criteria, updateData] = updateCalls[0];
       expect(criteria).toEqual({ leida: false });
@@ -413,7 +427,9 @@ describe('NotificacionesService', () => {
         socioId,
         mensaje,
       });
-      expect(notificacionRepository.save).toHaveBeenCalledWith(notificacionCreada);
+      expect(notificacionRepository.save).toHaveBeenCalledWith(
+        notificacionCreada,
+      );
     });
 
     it('debería crear notificación con tipo INHABILITACION_AUTOMATICA', async () => {

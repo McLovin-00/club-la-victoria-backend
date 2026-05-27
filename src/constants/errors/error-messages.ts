@@ -4,11 +4,14 @@ export const ERROR_MESSAGES = {
   INTERNAL_SERVER_ERROR: 'Error interno del servidor',
   UNEXPECTED_ERROR: 'Ocurrió un error inesperado',
 
-  // Errores de autenticación
+  // Autenticación
   USER_NOT_FOUND: 'Usuario no encontrado',
   INVALID_PASSWORD: 'La contraseña ingresada es incorrecta',
   UNAUTHORIZED: 'No autorizado',
   TOKEN_INVALID: 'Token inválido o expirado',
+
+  // Errores de autorización
+  FORBIDDEN: 'No tienes permiso para realizar esta acción',
 
   // Errores de validación
   VALIDATION_ERROR: 'Error en la validación de datos',
@@ -93,6 +96,8 @@ export const ERROR_CODES = {
   INVALID_PASSWORD: 'ERR_INVALID_PASSWORD',
   UNAUTHORIZED: 'ERR_UNAUTHORIZED',
   TOKEN_INVALID: 'ERR_TOKEN_INVALID',
+  FORBIDDEN: 'ERR_FORBIDDEN',
+  NOT_FOUND: 'ERR_NOT_FOUND',
 
   // Validación
   VALIDATION_ERROR: 'ERR_VALIDATION',

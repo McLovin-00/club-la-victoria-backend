@@ -40,16 +40,17 @@ describe('CloudinaryService', () => {
   });
 
   // Helper para crear un mock file
-  const createMockFile = (): Express.Multer.File => ({
-    fieldname: 'file',
-    originalname: 'test.jpg',
-    encoding: '7bit',
-    mimetype: 'image/jpeg',
-    size: 1024,
-    destination: '',
-    filename: '',
-    buffer: Buffer.from('mock image data'),
-  } as unknown as Express.Multer.File);
+  const createMockFile = (): Express.Multer.File =>
+    ({
+      fieldname: 'file',
+      originalname: 'test.jpg',
+      encoding: '7bit',
+      mimetype: 'image/jpeg',
+      size: 1024,
+      destination: '',
+      filename: '',
+      buffer: Buffer.from('mock image data'),
+    }) as unknown as Express.Multer.File;
 
   // Helper para simular upload stream con éxito
   const setupSuccessfulUpload = (response: object): void => {

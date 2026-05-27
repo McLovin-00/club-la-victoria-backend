@@ -11,6 +11,7 @@ import { TalonarioPdfService } from './services/talonario-pdf.service';
 import { TarjetaCentro23fService } from './services/tarjeta-centro-23f.service';
 import { NotificacionesModule } from '../notificaciones/notificaciones.module';
 import { AppConfigModule } from '../config/AppConfig/app-config.module';
+import { CreditoModule } from '../credito/credito.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AppConfigModule } from '../config/AppConfig/app-config.module';
     ]),
     NotificacionesModule,
     AppConfigModule,
+    CreditoModule,
   ],
   controllers: [CobrosController],
   providers: [CobrosService, TalonarioPdfService, TarjetaCentro23fService],

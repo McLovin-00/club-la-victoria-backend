@@ -20,6 +20,9 @@ import { Notificacion } from './notificaciones/entities/notificacion.entity';
 import { GrupoFamiliar } from './grupos-familiares/entities/grupo-familiar.entity';
 import { MetodoPago } from './metodos-pago/entities/metodo-pago.entity';
 import { CobradoresModule } from './cobradores/cobradores.module';
+import { CreditoModule } from './credito/credito.module';
+import { CreditoIndividual } from './credito/entities/credito-individual.entity';
+import { CreditoGrupal } from './credito/entities/credito-grupal.entity';
 import {
   Cobrador,
   CobradorComisionConfig,
@@ -65,6 +68,7 @@ import { DatabaseExtensionsService } from './database/database-extensions.servic
     CobradoresModule,
     GruposFamiliaresModule,
     MetodosPagoModule,
+    CreditoModule,
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
       inject: [AppConfigService],
@@ -94,6 +98,8 @@ import { DatabaseExtensionsService } from './database/database-extensions.servic
           CobradorCuentaCorrienteMovimiento,
           CobroOperacion,
           CobroOperacionLinea,
+          CreditoIndividual,
+          CreditoGrupal,
         ],
 
         synchronize: configService.getNodeEnv() === 'development',

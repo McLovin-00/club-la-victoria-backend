@@ -74,7 +74,19 @@ export class CobradoresController {
   ) {
     const parsedOffset = offset ? parseInt(offset, 10) : 0;
     const parsedLimit = limit ? parseInt(limit, 10) : 50;
-    return this.cobradoresService.buscarSociosMobile(q, parsedOffset, parsedLimit);
+    return this.cobradoresService.buscarSociosMobile(
+      q,
+      parsedOffset,
+      parsedLimit,
+    );
+  }
+
+  @Get('mobile/socios/:id')
+  @ApiOperation({ summary: 'Obtener detalle de socio para flujo mobile' })
+  @ApiResponse({ status: 200, description: 'Detalle del socio mobile' })
+  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  obtenerSocioMobile(@Param('id', ParseIntPipe) socioId: number) {
+    return this.cobradoresService.obtenerSocioMobile(socioId);
   }
 
   @Get('mobile/socios/:id/cuotas-pendientes')
@@ -113,7 +125,6 @@ export class CobradoresController {
   ) {
     return this.cobradoresService.configurarComision(cobradorId, dto);
   }
-
 
   @Get(':id/comision/vigente')
   @Private()

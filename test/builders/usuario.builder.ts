@@ -10,11 +10,11 @@ export class UsuarioBuilder {
 
   constructor(options: UsuarioBuilderOptions = {}) {
     this.usuario = {
-    id: 1,
-    usuario: 'testuser',
-    password: 'hashed_password_123',
-    ...options,
-  };
+      id: 1,
+      usuario: 'testuser',
+      password: 'hashed_password_123',
+      ...options,
+    };
   }
 
   withId(id: number): this {

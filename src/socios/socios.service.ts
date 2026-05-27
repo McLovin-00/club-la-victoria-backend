@@ -16,6 +16,7 @@ import {
 } from 'src/constants/errors/error-messages';
 import { CategoriaRulesService } from './services/categoria-rules.service';
 import { CategoriasSocioService } from 'src/categorias-socio/categorias-socio.service';
+import { applyMultiWordSearch } from 'src/common/utils/search.utils';
 
 @Injectable()
 export class SociosService {
@@ -309,29 +310,14 @@ export class SociosService {
       return [];
     }
 
-    // Dividir el query en palabras y filtrar vacíos
-    const words = query
-      .trim()
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((word) => word.length > 0);
-
-    if (words.length === 0) {
-      return [];
-    }
-
     const qb = this.socioRepository
       .createQueryBuilder('socio')
       .where('socio.estado = :estado', { estado: 'ACTIVO' });
 
-    // Para cada palabra, agregar condición AND que busque en nombre O apellido
-    words.forEach((word, index) => {
-      const paramName = `word${index}`;
-      qb.andWhere(
-        `(unaccent(socio.nombre) ILIKE unaccent(:${paramName}) OR unaccent(socio.apellido) ILIKE unaccent(:${paramName}))`,
-        { [paramName]: `%${word}%` },
-      );
-    });
+    applyMultiWordSearch(qb, query, [
+      { column: 'socio.nombre', useUnaccent: true },
+      { column: 'socio.apellido', useUnaccent: true },
+    ]);
 
     const socios = await qb
       .leftJoinAndSelect('socio.categoria', 'categoria')

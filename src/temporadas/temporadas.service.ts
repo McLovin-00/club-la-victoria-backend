@@ -11,6 +11,10 @@ import {
   ERROR_MESSAGES,
   ERROR_CODES,
 } from 'src/constants/errors/error-messages';
+import {
+  applyMultiWordSearch,
+  DEFAULT_SOCIO_SEARCH_FIELDS,
+} from 'src/common/utils/search.utils';
 
 @Injectable()
 export class TemporadasService {
@@ -216,10 +220,11 @@ export class TemporadasService {
 
     // Add search filter if provided
     if (search && search.trim()) {
-      queryBuilder.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:search) OR unaccent(socio.apellido) ILIKE unaccent(:search) OR socio.dni ILIKE :search OR unaccent(socio.email) ILIKE unaccent(:search))',
-        { search: `%${search.trim()}%` },
-      );
+      const fields = DEFAULT_SOCIO_SEARCH_FIELDS.map((f) => ({
+        ...f,
+        column: `socio.${f.column}`,
+      }));
+      applyMultiWordSearch(queryBuilder, search, fields, 'search');
     }
 
     // Add pagination

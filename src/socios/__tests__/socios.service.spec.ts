@@ -211,7 +211,9 @@ describe('SociosService', () => {
       await service.create(dtoNoOverride);
 
       expect(mockCategoriaRulesService.calcularCategoria).toHaveBeenCalled();
-      expect(mockCategoriasSocioService.findByNombre).toHaveBeenCalledWith('MENOR');
+      expect(mockCategoriasSocioService.findByNombre).toHaveBeenCalledWith(
+        'MENOR',
+      );
     });
 
     it('debería hacer rollback y eliminar foto de Cloudinary si falla la creación', async () => {
@@ -227,7 +229,9 @@ describe('SociosService', () => {
       });
       mockSocioRepository.createSocio.mockRejectedValue(new Error('DB Error'));
 
-      await expect(service.create(createDtoBase, mockFile)).rejects.toThrow(CustomError);
+      await expect(service.create(createDtoBase, mockFile)).rejects.toThrow(
+        CustomError,
+      );
 
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
       expect(mockCloudinaryService.deleteFile).toHaveBeenCalledWith(
@@ -246,7 +250,9 @@ describe('SociosService', () => {
         limit: 10,
       };
 
-      mockSocioRepository.findPaginatedAndFiltered.mockResolvedValue(mockResult);
+      mockSocioRepository.findPaginatedAndFiltered.mockResolvedValue(
+        mockResult,
+      );
 
       const result = await service.findAll(paginationDto);
 
@@ -263,7 +269,9 @@ describe('SociosService', () => {
         limit: 10,
       };
 
-      mockSocioRepository.findPaginatedAndFiltered.mockResolvedValue(mockResult);
+      mockSocioRepository.findPaginatedAndFiltered.mockResolvedValue(
+        mockResult,
+      );
 
       const result = await service.findAll(paginationDto);
 
@@ -272,7 +280,11 @@ describe('SociosService', () => {
     });
 
     it('debería filtrar por término de búsqueda', async () => {
-      const paginationDto: PaginationDto = { page: 1, limit: 10, search: 'Juan' };
+      const paginationDto: PaginationDto = {
+        page: 1,
+        limit: 10,
+        search: 'Juan',
+      };
       const mockResult = {
         data: [mockSocio],
         total: 1,
@@ -280,13 +292,17 @@ describe('SociosService', () => {
         limit: 10,
       };
 
-      mockSocioRepository.findPaginatedAndFiltered.mockResolvedValue(mockResult);
+      mockSocioRepository.findPaginatedAndFiltered.mockResolvedValue(
+        mockResult,
+      );
 
       const result = await service.findAll(paginationDto);
 
-      expect(
-        mockSocioRepository.findPaginatedAndFiltered,
-      ).toHaveBeenCalledWith(1, 10, 'Juan');
+      expect(mockSocioRepository.findPaginatedAndFiltered).toHaveBeenCalledWith(
+        1,
+        10,
+        'Juan',
+      );
       expect(result.data).toHaveLength(1);
     });
   });
@@ -393,7 +409,10 @@ describe('SociosService', () => {
         fotoUrl: 'https://cloudinary.com/old.jpg',
       };
 
-      const socioConFoto = { ...mockSocio, fotoUrl: 'https://cloudinary.com/old.jpg' };
+      const socioConFoto = {
+        ...mockSocio,
+        fotoUrl: 'https://cloudinary.com/old.jpg',
+      };
       mockSocioRepository.findOne.mockResolvedValue(socioConFoto);
       mockSocioRepository.save.mockResolvedValue({ ...mockSocio, fotoUrl: '' });
 
@@ -408,7 +427,9 @@ describe('SociosService', () => {
       mockSocioRepository.findOne.mockResolvedValue(mockSocio);
       mockSocioRepository.save.mockRejectedValue(new Error('DB Error'));
 
-      await expect(service.update(1, updateDtoBase)).rejects.toThrow(CustomError);
+      await expect(service.update(1, updateDtoBase)).rejects.toThrow(
+        CustomError,
+      );
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
@@ -416,7 +437,11 @@ describe('SociosService', () => {
   describe('remove', () => {
     it('debería eliminar un socio correctamente', async () => {
       mockSocioRepository.findOne.mockResolvedValue(mockSocio);
-      mockSocioRepository.delete.mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] });
+      mockSocioRepository.delete.mockResolvedValue({
+        affected: 1,
+        generatedMaps: [],
+        raw: [],
+      });
 
       const result = await service.remove(1);
 
@@ -430,7 +455,11 @@ describe('SociosService', () => {
       };
 
       mockSocioRepository.findOne.mockResolvedValue(socioConFoto);
-      mockSocioRepository.delete.mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] });
+      mockSocioRepository.delete.mockResolvedValue({
+        affected: 1,
+        generatedMaps: [],
+        raw: [],
+      });
 
       await service.remove(1);
 
@@ -447,7 +476,11 @@ describe('SociosService', () => {
 
     it('debería lanzar error si la eliminación no afecta registros', async () => {
       mockSocioRepository.findOne.mockResolvedValue(mockSocio);
-      mockSocioRepository.delete.mockResolvedValue({ affected: 0, generatedMaps: [], raw: [] });
+      mockSocioRepository.delete.mockResolvedValue({
+        affected: 0,
+        generatedMaps: [],
+        raw: [],
+      });
 
       await expect(service.remove(1)).rejects.toThrow(CustomError);
     });
@@ -474,10 +507,14 @@ describe('SociosService', () => {
         orderBy: jest.fn().mockReturnThis(),
         addOrderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([{ ...mockSocio, nombre: 'Juan' }]),
+        getMany: jest
+          .fn()
+          .mockResolvedValue([{ ...mockSocio, nombre: 'Juan' }]),
       };
 
-      mockSocioRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
+      mockSocioRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       const result = await service.findByName('Juan');
 
@@ -496,7 +533,9 @@ describe('SociosService', () => {
         getMany: jest.fn().mockResolvedValue([mockSocio]),
       };
 
-      mockSocioRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
+      mockSocioRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       await service.findByName('Juan García');
 
@@ -515,7 +554,9 @@ describe('SociosService', () => {
         getMany: jest.fn().mockResolvedValue([mockSocio]),
       };
 
-      mockSocioRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
+      mockSocioRepository.createQueryBuilder.mockReturnValue(
+        mockQueryBuilder as any,
+      );
 
       await service.findByName('Juan');
 

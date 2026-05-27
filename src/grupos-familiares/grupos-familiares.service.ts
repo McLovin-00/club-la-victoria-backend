@@ -165,7 +165,7 @@ export class GruposFamiliaresService {
     }
   }
 
-/**
+  /**
    * Elimina un grupo familiar (los socios quedan sin grupo - ON DELETE SET NULL)
    */
   async remove(id: number): Promise<void> {

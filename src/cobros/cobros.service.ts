@@ -12,9 +12,10 @@ import { PagoCuota } from './entities/pago-cuota.entity';
 import {
   ActorCobro,
   CobroOperacion,
-  OrigenCobro,
 } from './entities/cobro-operacion.entity';
+import { CreditoIndividual } from '../credito/entities/credito-individual.entity';
 import { CobradorComisionConfig } from '../cobradores/entities/cobrador-comision-config.entity';
+import { CobradorDispositivo } from '../cobradores/entities/cobrador-dispositivo.entity';
 import { normalizeComisionPorcentaje } from '../cobradores/utils/comision.util';
 import {
   CobradorCuentaCorrienteMovimiento,
@@ -29,6 +30,10 @@ import { MetodoPago } from '../metodos-pago/entities/metodo-pago.entity';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
 import { TipoNotificacion } from '../notificaciones/entities/notificacion.entity';
 import {
+  applyMultiWordSearch,
+  SOCIO_NAME_DNI_SEARCH_FIELDS,
+} from '../common/utils/search.utils';
+import {
   GenerarCuotasDto,
   RegistrarPagoDto,
   RegistrarPagoMultipleDto,
@@ -38,6 +43,7 @@ import {
   ReciboMultipleCuotasDto,
   PagoMetodoMontoDto,
   GenerarCuotasSeleccionDto,
+  ActualizarOperacionCobroDto,
   // Morosos detallados
   MorososQueryDto,
   SeveridadMoroso,
@@ -46,12 +52,16 @@ import {
   MorososDetalladosResponseDto,
   ProcesarResultadosTarjetaCentroDto,
   TarjetaCentroResultadoDto,
+  PagoAnualDto,
+  PagoAnualResponseDto,
+  CobroOperacionCreditoSummary,
 } from './dto';
 import { CustomError } from 'src/constants/errors/custom-error';
 import {
   ERROR_MESSAGES,
   ERROR_CODES,
 } from 'src/constants/errors/error-messages';
+import { CreditoService } from '../credito/credito.service';
 
 export interface ResultadoGeneracionCuotas {
   creadas: number;
@@ -71,14 +81,20 @@ export interface CuentaCorriente {
     periodo: string;
     monto: number;
     estado: EstadoCuota;
-    tarjetaCentroEstado: 'PENDIENTE_RESPUESTA' | 'APROBADA' | 'RECHAZADA' | 'NO_APLICA';
+    tarjetaCentroEstado:
+      | 'PENDIENTE_RESPUESTA'
+      | 'APROBADA'
+      | 'RECHAZADA'
+      | 'NO_APLICA';
     tarjetaCentroDetalle: string;
-    tarjetaCentroFechaEstado?: Date;
-    fechaPago?: Date;
+    tarjetaCentroFechaEstado?: Date | null;
+    fechaPago?: Date | null;
   }[];
   totalDeuda: number;
   totalPagado: number;
   mesesAdeudados: number;
+  /** Crédito individual disponible del socio (en pesos, no cents) */
+  creditoIndividual: number;
 }
 
 export interface DesglosePorMetodoPago {
@@ -145,6 +161,7 @@ export class CobrosService {
     private readonly socioRepository: Repository<Socio>,
     private readonly dataSource: DataSource,
     private readonly notificacionesService: NotificacionesService,
+    private readonly creditoService: CreditoService,
   ) {}
 
   /**
@@ -383,7 +400,7 @@ export class CobrosService {
       // 1. Buscar la cuota por ID
       cuota = await queryRunner.manager.findOne(Cuota, {
         where: { id: dto.cuotaId },
-        relations: ['socio'],
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!cuota) {
@@ -405,12 +422,42 @@ export class CobrosService {
 
       await this.validarMetodoPagoActivo(queryRunner, dto.metodoPagoId);
 
+      const totalCuotaCents = this.toCents(Number(cuota.monto));
+      const totalPagoCents = this.toCents(Number(dto.montoPagado ?? cuota.monto));
+      let montoACobrarCents = totalCuotaCents;
+
+      if (totalCuotaCents > 0) {
+        const resultAplicar = await this.creditoService.aplicarCreditoIndividual(
+          queryRunner,
+          cuota.socioId,
+          this.fromCents(totalCuotaCents),
+        );
+        montoACobrarCents = this.toCents(resultAplicar.montoACobrar);
+      }
+
+      if (totalPagoCents < montoACobrarCents) {
+        throw new CustomError(
+          'El importe abonado debe cubrir el monto a cobrar después de aplicar crédito',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      const excedenteCents = totalPagoCents - montoACobrarCents;
+      if (excedenteCents > 0) {
+        await this.creditoService.acumularCreditoIndividual(
+          queryRunner,
+          cuota.socioId,
+          this.fromCents(excedenteCents),
+        );
+      }
+
       const fechaPago = new Date();
 
       // 3. Crear el registro de pago
       const pago = queryRunner.manager.create(PagoCuota, {
         cuotaId: cuota.id,
-        montoPagado: cuota.monto,
+        montoPagado: this.fromCents(montoACobrarCents),
         metodoPagoId: dto.metodoPagoId,
         observaciones: dto.observaciones,
         fechaPago,
@@ -424,10 +471,7 @@ export class CobrosService {
       cuota.fechaPago = fechaPago;
       await queryRunner.manager.save(cuota);
 
-      await this.recalcularEstadoSocioPorMorosidad(
-        queryRunner,
-        cuota.socioId,
-      );
+      await this.recalcularEstadoSocioPorMorosidad(queryRunner, cuota.socioId);
 
       await queryRunner.commitTransaction();
       return { cuota, pago };
@@ -565,18 +609,26 @@ export class CobrosService {
         );
 
         if (operacionExistente) {
+          await queryRunner.commitTransaction();
           return operacionExistente;
         }
       }
 
-      const cuotaIdsUnicos = dto.cuotaIds ? Array.from(new Set(dto.cuotaIds)) : [];
-      const cuotas = cuotaIdsUnicos.length > 0 
-        ? await queryRunner.manager.find(Cuota, {
-            where: { id: In(cuotaIdsUnicos), socioId: dto.socioId },
-          })
+      const cuotaIdsUnicos = dto.cuotaIds
+        ? Array.from(new Set(dto.cuotaIds))
         : [];
+      const cuotas =
+        cuotaIdsUnicos.length > 0
+          ? await queryRunner.manager.find(Cuota, {
+              where: { id: In(cuotaIdsUnicos), socioId: dto.socioId },
+              lock: { mode: 'pessimistic_write' },
+            })
+          : [];
 
-      if (cuotaIdsUnicos.length > 0 && cuotas.length !== cuotaIdsUnicos.length) {
+      if (
+        cuotaIdsUnicos.length > 0 &&
+        cuotas.length !== cuotaIdsUnicos.length
+      ) {
         throw new CustomError(
           'Una o más cuotas seleccionadas no existen o no pertenecen al socio',
           400,
@@ -595,7 +647,7 @@ export class CobrosService {
         );
       }
 
-      let cobradorIdOperacion = dto.cobradorId;
+      const cobradorIdOperacion = dto.cobradorId;
 
       if (dto.actorCobro === ActorCobro.COBRADOR) {
         if (!dto.cobradorId) {
@@ -615,22 +667,44 @@ export class CobrosService {
         (acc, concepto) => acc + Number(concepto.monto),
         0,
       );
-      const totalCalculado = this.toCents(totalCuotas + totalConceptos);
+      const totalCargos = this.toCents(totalCuotas + totalConceptos);
       const totalInformado = this.toCents(Number(dto.total));
 
-      if (totalCalculado !== totalInformado) {
-        throw new CustomError(
-          'El total informado no coincide con la suma de cuotas y conceptos',
-          400,
-          ERROR_CODES.VALIDATION_ERROR,
+      // ==================== CRÉDITO INDIVIDUAL ====================
+      let montoACobrar = totalCargos; // already in cents
+      let creditoAplicado = 0;
+      let creditoGenerado = 0;
+      let saldoCreditoDespues = 0;
+      let creditoDisponibleAntes = 0; // track before-saldo for summary
+
+      if (montoACobrar > 0) {
+        const resultAplicar = await this.creditoService.aplicarCreditoIndividual(
+          queryRunner,
+          dto.socioId,
+          this.fromCents(totalCargos),
         );
+        montoACobrar = this.toCents(resultAplicar.montoACobrar);
+        creditoAplicado = this.toCents(resultAplicar.creditoAplicado);
+        // creditoDisponibleAntes = credit that was available before this operation
+        // = creditoAplicado + remaining saldo after application
+        creditoDisponibleAntes = this.toCents(resultAplicar.creditoAplicado + resultAplicar.nuevoSaldo);
+        saldoCreditoDespues = this.toCents(resultAplicar.nuevoSaldo);
       }
 
+      // ==================== CRÉDITO RESUMEN (para respuesta) ====================
+      // later: populate this after we know totalPagos
+
+      // ==================== VALIDACIÓN DE Pagos vs montoACobrar ====================
       const pagosOperacion =
         dto.pagos && dto.pagos.length > 0
           ? dto.pagos
           : dto.metodoPagoId
-            ? [{ metodoPagoId: dto.metodoPagoId, monto: this.fromCents(totalInformado) }]
+            ? [
+                {
+                  metodoPagoId: dto.metodoPagoId,
+                  monto: this.fromCents(totalInformado),
+                },
+              ]
             : [];
 
       if (pagosOperacion.length === 0) {
@@ -649,7 +723,9 @@ export class CobrosService {
         );
       }
 
-      const metodosUnicos = new Set(pagosOperacion.map((pago) => pago.metodoPagoId));
+      const metodosUnicos = new Set(
+        pagosOperacion.map((pago) => pago.metodoPagoId),
+      );
       if (metodosUnicos.size !== pagosOperacion.length) {
         throw new CustomError(
           'No se puede repetir el mismo método de pago',
@@ -661,9 +737,54 @@ export class CobrosService {
       const totalPagosCents = this.toCents(
         pagosOperacion.reduce((acc, pago) => acc + Number(pago.monto), 0),
       );
-      if (totalPagosCents !== totalInformado) {
+
+      // Validación: pagos deben cubrir montoACobrar (neto tras crédito aplicado)
+      if (totalPagosCents < montoACobrar) {
         throw new CustomError(
-          'La suma de importes por método debe coincidir con el total informado',
+          'La suma de importes por método debe ser al menos el monto total a cobrar (después de aplicar crédito)',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      // Validación: pagos no pueden superar cargos + un límite razonable para evitar abusos
+      // (el pago puede superar los cargos netos → genera crédito, pero no en cantidad absurda)
+      // Límite:el pago puede superar los cargos brutos + 1,000,000 cents (+$10,000) para cubrir cualquier escenario real
+      if (totalPagosCents > totalCargos + 1000000) {
+        throw new CustomError(
+          'El total informado supera el monto máximo permitido para esta operación',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      // Si pago > montoACobrar, acumular excedente como crédito
+      // montoACobrar ya viene en cents de aplicarCreditoIndividual; totalPagosCents también
+      const excedente = totalPagosCents - montoACobrar;
+      if (excedente > 0) {
+        const resultAcumular = await this.creditoService.acumularCreditoIndividual(
+          queryRunner,
+          dto.socioId,
+          this.fromCents(excedente),
+        );
+        creditoGenerado = this.toCents(resultAcumular.creditoGenerado);
+        saldoCreditoDespues = this.toCents(resultAcumular.nuevoSaldo);
+      }
+
+      // Validación: pagos deben cubrir montoACobrar (neto tras crédito).
+      // Si no se generó nuevo crédito, pagos == montoACobrar; si sí se generó, excedente > 0 y la validación ya pasó.
+      // Caso con crédito aplicado pero sin excedente: pagos == montoACobrar (descontando el crédito).
+      // Caso sin crédito y sin excedente: pagos == totalCargos (comportamiento original preservado).
+      if (creditoGenerado === 0 && creditoAplicado === 0 && totalPagosCents !== totalCargos) {
+        throw new CustomError(
+          'El total informado no coincide con la suma de cuotas y conceptos',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+      if (creditoGenerado === 0 && creditoAplicado > 0 && totalPagosCents !== montoACobrar) {
+        throw new CustomError(
+          'El total de pagos no coincide con el monto a cobrar después de aplicar crédito',
           400,
           ERROR_CODES.VALIDATION_ERROR,
         );
@@ -675,9 +796,14 @@ export class CobrosService {
         actorCobro: dto.actorCobro,
         origenCobro: dto.origenCobro,
         cobradorId:
-          dto.actorCobro === ActorCobro.COBRADOR ? cobradorIdOperacion : undefined,
+          dto.actorCobro === ActorCobro.COBRADOR
+            ? cobradorIdOperacion
+            : undefined,
         idempotencyKey: dto.idempotencyKey,
         total: this.fromCents(totalInformado),
+        totalCargos: this.fromCents(totalCargos),
+        creditoAplicado: this.fromCents(creditoAplicado),
+        creditoGenerado: this.fromCents(creditoGenerado),
         referencia: dto.referencia,
         observaciones: dto.observaciones,
       });
@@ -688,7 +814,8 @@ export class CobrosService {
         dto.actorCobro === ActorCobro.COBRADOR &&
         typeof cobradorIdOperacion === 'number'
       ) {
-        const fechaOperacion = operacionGuardada.fechaHoraServidor ?? new Date();
+        const fechaOperacion =
+          operacionGuardada.fechaHoraServidor ?? new Date();
         const porcentajeComision = await this.obtenerPorcentajeComisionVigente(
           queryRunner,
           cobradorIdOperacion,
@@ -723,6 +850,11 @@ export class CobrosService {
         cents: this.toCents(Number(pago.monto)),
       }));
 
+      // Virtual credit coverage bucket: creditoAplicado covers part of raw charges
+      // before cash is consumed. This allows partial-credit flows where cash < raw charges.
+      // creditAplicado tracks the remaining credit cents to apply across cuotas.
+      let creditoAplicadoRestanteCents = creditoAplicado;
+
       for (const cuota of cuotasOrdenadas) {
         lineas.push(
           queryRunner.manager.create(CobroOperacionLinea, {
@@ -735,6 +867,19 @@ export class CobrosService {
 
         let restanteCuotaCents = this.toCents(Number(cuota.monto));
 
+        // First: apply credit to this quota (virtual payment — no real cash movement)
+        if (creditoAplicadoRestanteCents > 0 && restanteCuotaCents > 0) {
+          const cubiertoPorCredito = Math.min(
+            restanteCuotaCents,
+            creditoAplicadoRestanteCents,
+          );
+          if (cubiertoPorCredito > 0) {
+            restanteCuotaCents -= cubiertoPorCredito;
+            creditoAplicadoRestanteCents -= cubiertoPorCredito;
+          }
+        }
+
+        // Second: apply cash payments to remaining quota amount
         for (const pagoMetodo of pagosRestantes) {
           if (restanteCuotaCents <= 0) {
             break;
@@ -788,12 +933,48 @@ export class CobrosService {
         0,
       );
       const totalConceptosCents = this.toCents(totalConceptos);
-      if (restantePagosCents !== totalConceptosCents) {
+      // When credit is applied (creditoAplicado > 0), cash covers only the net amount.
+      // The credit bucket covers the difference, so remaining cash may equal conceptos
+      // even if cash < original cuotas+conceptos. Skip this check when credit was applied.
+      if (
+        restantePagosCents !== totalConceptosCents &&
+        creditoGenerado === 0 &&
+        creditoAplicado === 0
+      ) {
         throw new CustomError(
           'La distribución por método no coincide con la composición de cuotas y conceptos',
           400,
           ERROR_CODES.VALIDATION_ERROR,
         );
+      }
+
+      // Flush de sobrantes por método contra la última cuota de la operación.
+      // Los conceptos no tienen tabla propia para trazar su método, así que los
+      // PagoCuota extra se "adhieren" a la última cuota. Consecuencia: el sum
+      // de PagoCuota por cuota puede superar cuota.monto, pero el desglose por
+      // método queda completo (listarCuentaCorriente del cobrador y desglose
+      // del reporte de cobranza). totalCobrado y %Cobranza del reporte no se
+      // ven afectados porque se calculan desde cuota.estado, no desde PagoCuota.
+      if (cuotasOrdenadas.length > 0) {
+        const ultimaCuota = cuotasOrdenadas[cuotasOrdenadas.length - 1];
+        for (const pagoMetodo of pagosRestantes) {
+          if (pagoMetodo.cents <= 0) continue;
+          const pagoExtra = queryRunner.manager.create(PagoCuota, {
+            cuotaId: ultimaCuota.id,
+            montoPagado: this.fromCents(pagoMetodo.cents),
+            metodoPagoId: pagoMetodo.metodoPagoId,
+            observaciones: dto.observaciones,
+            fechaPago,
+            fechaEmisionCuota: ultimaCuota.createdAt,
+            operacionCobroId: operacionGuardada.id,
+            cobradorId:
+              dto.actorCobro === ActorCobro.COBRADOR
+                ? cobradorIdOperacion
+                : undefined,
+          });
+          await queryRunner.manager.save(pagoExtra);
+          pagoMetodo.cents = 0;
+        }
       }
 
       for (const concepto of dto.conceptos ?? []) {
@@ -811,14 +992,41 @@ export class CobrosService {
       await queryRunner.manager.save(lineas);
       await queryRunner.commitTransaction();
 
-      const operacionCompleta = await queryRunner.manager.findOne(CobroOperacion, {
-        where: { id: operacionGuardada.id },
-        relations: ['lineas', 'socio', 'metodoPago'],
-      });
+      const operacionCompleta = await queryRunner.manager.findOne(
+        CobroOperacion,
+        {
+          where: { id: operacionGuardada.id },
+          relations: ['lineas', 'socio', 'metodoPago'],
+        },
+      );
 
-      return operacionCompleta;
+      // Attach credit summary so the controller can expose it
+      const summary: import('./dto/cobros.dto').CobroOperacionCreditoSummary = {
+        totalCargos: this.fromCents(totalCargos),
+        creditoAplicado: this.fromCents(creditoAplicado),
+        creditoGenerado: this.fromCents(creditoGenerado),
+        montoACobrar: this.fromCents(montoACobrar),
+        creditoDisponible: this.fromCents(creditoDisponibleAntes),
+        saldoCreditoDespues: this.fromCents(saldoCreditoDespues),
+      };
+
+      return {
+        ...operacionCompleta,
+        credito: summary,
+      };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      if (dto.idempotencyKey && this.esConflictoUnicoDeIdempotencia(error)) {
+        const operacionExistente = await this.cobroOperacionRepository.findOne({
+          where: { idempotencyKey: dto.idempotencyKey },
+          relations: ['lineas'],
+        });
+
+        if (operacionExistente) {
+          return operacionExistente;
+        }
+      }
+
       const fkError = this.mapearErrorIntegridadReferencial(error);
       if (fkError) {
         throw fkError;
@@ -840,7 +1048,479 @@ export class CobrosService {
     }
   }
 
-  async registrarCobroGrupal(dto: RegistrarCobroGrupalDto): Promise<CobroOperacion[]> {
+  async actualizarOperacionCobro(
+    id: number,
+    dto: ActualizarOperacionCobroDto,
+  ): Promise<CobroOperacion> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const operacion = await queryRunner.manager.findOne(CobroOperacion, {
+        where: { id },
+        relations: ['lineas', 'socio'],
+      });
+
+      if (!operacion) {
+        throw new CustomError(
+          'Operación no encontrada',
+          404,
+          ERROR_CODES.NOT_FOUND,
+        );
+      }
+
+      if (operacion.actorCobro !== ActorCobro.COBRADOR) {
+        throw new CustomError(
+          'Solo se pueden editar operaciones de cobrador',
+          403,
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
+      if (!dto.cobradorId || dto.cobradorId !== operacion.cobradorId) {
+        throw new CustomError(
+          'No autorizado para editar esta operación',
+          403,
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
+      const installationId = dto.installationId?.trim();
+      if (!installationId) {
+        throw new CustomError(
+          'No autorizado para editar esta operación',
+          403,
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
+      const dispositivosVinculados = await queryRunner.manager.count(
+        CobradorDispositivo,
+        {
+          where: {
+            installationId,
+            cobradorId: dto.cobradorId,
+          },
+        },
+      );
+      if (dispositivosVinculados === 0) {
+        throw new CustomError(
+          'No autorizado para editar esta operación',
+          403,
+          ERROR_CODES.FORBIDDEN,
+        );
+      }
+
+      const cuotaIdsUnicos = Array.from(new Set(dto.cuotaIds));
+      const cuotas = await queryRunner.manager.find(Cuota, {
+        where: { id: In(cuotaIdsUnicos), socioId: operacion.socioId },
+      });
+
+      if (cuotas.length !== cuotaIdsUnicos.length) {
+        throw new CustomError(
+          'Una o más cuotas seleccionadas no existen o no pertenecen al socio',
+          400,
+          ERROR_CODES.CUOTA_NOT_FOUND,
+        );
+      }
+
+      const cuotasYaPagadasPorOtro = cuotas.filter(
+        (c) =>
+          c.estado === EstadoCuota.PAGADA &&
+          !operacion.lineas.some((l) => l.cuotaId === c.id),
+      );
+      if (cuotasYaPagadasPorOtro.length > 0) {
+        throw new CustomError(
+          ERROR_MESSAGES.CUOTA_YA_PAGADA,
+          409,
+          ERROR_CODES.CUOTA_YA_PAGADA,
+        );
+      }
+
+      // ==================== REVERSIÓN DE CRÉDITO DE LA OPERACIÓN ANTERIOR ====================
+      // Si la operación anterior generó o aplicó crédito, revertir esos efectos
+      // antes de recalcular con los nuevos valores.
+      if (Number(operacion.creditoAplicado) > 0) {
+        const credAnterior = await queryRunner.manager.findOne(CreditoIndividual, {
+          where: { socioId: operacion.socioId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (credAnterior) {
+          credAnterior.saldo = Number(credAnterior.saldo) + Number(operacion.creditoAplicado);
+          await queryRunner.manager.save(credAnterior);
+        }
+      }
+
+      if (Number(operacion.creditoGenerado) > 0) {
+        const credAnteriorGen = await queryRunner.manager.findOne(CreditoIndividual, {
+          where: { socioId: operacion.socioId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (credAnteriorGen) {
+          credAnteriorGen.saldo = Number(credAnteriorGen.saldo) - Number(operacion.creditoGenerado);
+          await queryRunner.manager.save(credAnteriorGen);
+        }
+      }
+
+      const totalCuotas = cuotas.reduce(
+        (acc, cuota) => acc + Number(cuota.monto),
+        0,
+      );
+      const totalConceptos = (dto.conceptos ?? []).reduce(
+        (acc, concepto) => acc + Number(concepto.monto),
+        0,
+      );
+      const totalCargos = this.toCents(totalCuotas + totalConceptos);
+      const totalInformado = this.toCents(Number(dto.total));
+
+      // ==================== CRÉDITO INDIVIDUAL ====================
+      let montoACobrar = totalCargos;
+      let creditoAplicado = 0;
+      let creditoGenerado = 0;
+
+      if (montoACobrar > 0) {
+        const resultAplicar = await this.creditoService.aplicarCreditoIndividual(
+          queryRunner,
+          operacion.socioId,
+          this.fromCents(totalCargos),
+        );
+        montoACobrar = this.toCents(resultAplicar.montoACobrar);
+        creditoAplicado = this.toCents(resultAplicar.creditoAplicado);
+      }
+
+      const pagosOperacion =
+        dto.pagos && dto.pagos.length > 0
+          ? dto.pagos
+          : dto.metodoPagoId
+            ? [
+                {
+                  metodoPagoId: dto.metodoPagoId,
+                  monto: this.fromCents(totalInformado),
+                },
+              ]
+            : [];
+
+      if (pagosOperacion.length === 0) {
+        throw new CustomError(
+          'Debe indicar al menos un método de pago',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      if (pagosOperacion.length > 2) {
+        throw new CustomError(
+          'Solo se permiten hasta dos métodos de pago',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      const metodosUnicos = new Set(pagosOperacion.map((p) => p.metodoPagoId));
+      if (metodosUnicos.size !== pagosOperacion.length) {
+        throw new CustomError(
+          'No se puede repetir el mismo método de pago',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      const totalPagosCents = this.toCents(
+        pagosOperacion.reduce((acc, pago) => acc + Number(pago.monto), 0),
+      );
+
+      if (totalPagosCents < montoACobrar) {
+        throw new CustomError(
+          'La suma de importes por método debe ser al menos el monto total a cobrar (después de aplicar crédito)',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      const excedente = totalPagosCents - montoACobrar;
+      if (excedente > 0) {
+        const resultAcumular = await this.creditoService.acumularCreditoIndividual(
+          queryRunner,
+          operacion.socioId,
+          this.fromCents(excedente),
+        );
+        creditoGenerado = this.toCents(resultAcumular.creditoGenerado);
+      }
+
+      if (totalPagosCents !== montoACobrar && creditoGenerado === 0 && creditoAplicado === 0) {
+        throw new CustomError(
+          'El total informado no coincide con la suma de cuotas y conceptos',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      const oldTotalCents = this.toCents(Number(operacion.total));
+      operacion.metodoPagoId = pagosOperacion[0].metodoPagoId;
+      operacion.total = this.fromCents(totalInformado);
+      operacion.totalCargos = this.fromCents(totalCargos);
+      operacion.creditoAplicado = this.fromCents(creditoAplicado);
+      operacion.creditoGenerado = this.fromCents(creditoGenerado);
+      if (dto.referencia !== undefined) {
+        operacion.referencia = dto.referencia;
+      }
+      if (dto.observaciones !== undefined) {
+        operacion.observaciones = dto.observaciones;
+      }
+      await queryRunner.manager.save(operacion);
+
+      const lineasOriginales = await queryRunner.manager.find(
+        CobroOperacionLinea,
+        {
+          where: { operacionId: id },
+        },
+      );
+
+      const oldCuotaIds = new Set(
+        lineasOriginales
+          .filter((l) => l.cuotaId != null)
+          .map((l) => l.cuotaId!),
+      );
+      const newCuotaIds = new Set(cuotaIdsUnicos);
+
+      await queryRunner.manager.delete(PagoCuota, {
+        operacionCobroId: id,
+      });
+
+      const cuotasARevertar = [...oldCuotaIds].filter(
+        (id) => !newCuotaIds.has(id),
+      );
+
+      if (cuotasARevertar.length > 0) {
+        const cuotasRevertir = await queryRunner.manager.find(Cuota, {
+          where: { id: In(cuotasARevertar) },
+        });
+        for (const cuota of cuotasRevertir) {
+          cuota.estado = EstadoCuota.PENDIENTE;
+          cuota.fechaPago = null;
+          await queryRunner.manager.save(cuota);
+        }
+
+        await queryRunner.manager.delete(CobroOperacionLinea, {
+          operacionId: id,
+          cuotaId: In(cuotasARevertar),
+        });
+      }
+
+      const newCuotaSet = new Set(cuotaIdsUnicos);
+      await queryRunner.manager.delete(CobroOperacionLinea, {
+        operacionId: id,
+        tipoLinea: TipoLineaCobro.CONCEPTO,
+      });
+
+      await queryRunner.manager.delete(CobroOperacionLinea, {
+        operacionId: id,
+        tipoLinea: TipoLineaCobro.CUOTA,
+        cuotaId: In([...newCuotaSet]),
+      });
+
+      const newLineas: CobroOperacionLinea[] = [];
+      const cuotasOrdenadas = [...cuotas].sort((a, b) =>
+        a.periodo.localeCompare(b.periodo),
+      );
+      const pagosRestantes = pagosOperacion.map((pago) => ({
+        metodoPagoId: pago.metodoPagoId,
+        cents: this.toCents(Number(pago.monto)),
+      }));
+      let creditoAplicadoRestanteCents = creditoAplicado;
+
+      for (const cuota of cuotasOrdenadas) {
+        newLineas.push(
+          queryRunner.manager.create(CobroOperacionLinea, {
+            operacionId: operacion.id,
+            tipoLinea: TipoLineaCobro.CUOTA,
+            cuotaId: cuota.id,
+            monto: cuota.monto,
+          }),
+        );
+
+        let restanteCuotaCents = this.toCents(Number(cuota.monto));
+
+        if (creditoAplicadoRestanteCents > 0 && restanteCuotaCents > 0) {
+          const cubiertoPorCredito = Math.min(
+            restanteCuotaCents,
+            creditoAplicadoRestanteCents,
+          );
+
+          restanteCuotaCents -= cubiertoPorCredito;
+          creditoAplicadoRestanteCents -= cubiertoPorCredito;
+        }
+
+        for (const pagoMetodo of pagosRestantes) {
+          if (restanteCuotaCents <= 0) {
+            break;
+          }
+          if (pagoMetodo.cents <= 0) {
+            continue;
+          }
+
+          const aplicadoCents = Math.min(restanteCuotaCents, pagoMetodo.cents);
+          if (aplicadoCents <= 0) {
+            continue;
+          }
+
+          const pago = queryRunner.manager.create(PagoCuota, {
+            cuotaId: cuota.id,
+            montoPagado: this.fromCents(aplicadoCents),
+            metodoPagoId: pagoMetodo.metodoPagoId,
+            observaciones: dto.observaciones,
+            fechaPago: new Date(),
+            fechaEmisionCuota: cuota.createdAt,
+            operacionCobroId: operacion.id,
+            cobradorId: operacion.cobradorId ?? undefined,
+          });
+          await queryRunner.manager.save(pago);
+
+          restanteCuotaCents -= aplicadoCents;
+          pagoMetodo.cents -= aplicadoCents;
+        }
+
+        if (restanteCuotaCents !== 0) {
+          throw new CustomError(
+            `No fue posible distribuir completamente el pago para la cuota ${cuota.id}`,
+            400,
+            ERROR_CODES.VALIDATION_ERROR,
+          );
+        }
+
+        cuota.estado = EstadoCuota.PAGADA;
+        cuota.fechaPago = new Date();
+        await queryRunner.manager.save(cuota);
+      }
+
+      // Validar que el sobrante de métodos coincida con los conceptos.
+      const restantePagosCents = pagosRestantes.reduce(
+        (acc, pago) => acc + pago.cents,
+        0,
+      );
+      const totalConceptosCentsUpdate = this.toCents(totalConceptos);
+      if (
+        restantePagosCents !== totalConceptosCentsUpdate &&
+        creditoGenerado === 0 &&
+        creditoAplicado === 0
+      ) {
+        throw new CustomError(
+          'La distribución por método no coincide con la composición de cuotas y conceptos',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      // Flush de sobrantes por método contra la última cuota de la operación.
+      // Ver comentario equivalente en registrarOperacionCobro para el detalle.
+      if (cuotasOrdenadas.length > 0) {
+        const ultimaCuota = cuotasOrdenadas[cuotasOrdenadas.length - 1];
+        for (const pagoMetodo of pagosRestantes) {
+          if (pagoMetodo.cents <= 0) continue;
+          const pagoExtra = queryRunner.manager.create(PagoCuota, {
+            cuotaId: ultimaCuota.id,
+            montoPagado: this.fromCents(pagoMetodo.cents),
+            metodoPagoId: pagoMetodo.metodoPagoId,
+            observaciones: dto.observaciones,
+            fechaPago: new Date(),
+            fechaEmisionCuota: ultimaCuota.createdAt,
+            operacionCobroId: operacion.id,
+            cobradorId: operacion.cobradorId ?? undefined,
+          });
+          await queryRunner.manager.save(pagoExtra);
+          pagoMetodo.cents = 0;
+        }
+      }
+
+      for (const concepto of dto.conceptos ?? []) {
+        newLineas.push(
+          queryRunner.manager.create(CobroOperacionLinea, {
+            operacionId: operacion.id,
+            tipoLinea: TipoLineaCobro.CONCEPTO,
+            concepto: concepto.concepto,
+            descripcion: concepto.descripcion,
+            monto: concepto.monto,
+          }),
+        );
+      }
+
+      await queryRunner.manager.save(newLineas);
+
+      if (
+        operacion.actorCobro === ActorCobro.COBRADOR &&
+        typeof operacion.cobradorId === 'number'
+      ) {
+        await queryRunner.manager.delete(CobradorCuentaCorrienteMovimiento, {
+          cobroOperacionId: operacion.id,
+        });
+
+        const fechaOperacion = operacion.fechaHoraServidor ?? new Date();
+        const porcentajeComision = await this.obtenerPorcentajeComisionVigente(
+          queryRunner,
+          operacion.cobradorId,
+          fechaOperacion,
+        );
+        const montoComision = this.fromCents(
+          this.toCents(this.fromCents(totalInformado) * porcentajeComision),
+        );
+
+        const movimientoComision = queryRunner.manager.create(
+          CobradorCuentaCorrienteMovimiento,
+          {
+            cobradorId: operacion.cobradorId,
+            tipoMovimiento: TipoMovimientoCobrador.COMISION_GENERADA,
+            monto: montoComision,
+            cobroOperacionId: operacion.id,
+            referencia: dto.referencia,
+            observacion: `Comision ${Number(porcentajeComision * 100).toFixed(2)}% generada por operacion #${operacion.id}`,
+          },
+        );
+        await queryRunner.manager.save(movimientoComision);
+      }
+
+      await this.recalcularEstadoSocioPorMorosidad(
+        queryRunner,
+        operacion.socioId,
+      );
+
+      await queryRunner.commitTransaction();
+
+      const operacionActualizada = await queryRunner.manager.findOne(
+        CobroOperacion,
+        {
+          where: { id: operacion.id },
+          relations: ['lineas', 'socio', 'metodoPago'],
+        },
+      );
+
+      return operacionActualizada!;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) {
+        throw fkError;
+      }
+      if (error instanceof CustomError) {
+        throw error;
+      }
+      this.logger.error(
+        'Error actualizando operación de cobro',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new CustomError(
+        ERROR_MESSAGES.ERROR_REGISTRANDO_PAGO,
+        500,
+        ERROR_CODES.INTERNAL_SERVER_ERROR,
+      );
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async registrarCobroGrupal(
+    dto: RegistrarCobroGrupalDto,
+  ): Promise<CobroOperacion[]> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -878,7 +1558,9 @@ export class CobrosService {
         );
       }
 
-      const metodosUnicos = new Set(pagosOperacion.map((pago) => pago.metodoPagoId));
+      const metodosUnicos = new Set(
+        pagosOperacion.map((pago) => pago.metodoPagoId),
+      );
       if (metodosUnicos.size !== pagosOperacion.length) {
         throw new CustomError(
           'No se puede repetir el mismo metodo de pago',
@@ -896,15 +1578,20 @@ export class CobrosService {
       }
 
       const idempotencyKeysPorSocio = dto.idempotencyKey
-        ? cobrosConCuotas.map((cobro) => `${dto.idempotencyKey}:${cobro.socioId}`)
+        ? cobrosConCuotas.map(
+            (cobro) => `${dto.idempotencyKey}:${cobro.socioId}`,
+          )
         : [];
 
       if (idempotencyKeysPorSocio.length > 0) {
-        const operacionesExistentes = await queryRunner.manager.find(CobroOperacion, {
-          where: { idempotencyKey: In(idempotencyKeysPorSocio) },
-          relations: ['lineas', 'socio', 'metodoPago'],
-          order: { id: 'ASC' },
-        });
+        const operacionesExistentes = await queryRunner.manager.find(
+          CobroOperacion,
+          {
+            where: { idempotencyKey: In(idempotencyKeysPorSocio) },
+            relations: ['lineas', 'socio', 'metodoPago'],
+            order: { id: 'ASC' },
+          },
+        );
 
         if (operacionesExistentes.length > 0) {
           if (operacionesExistentes.length !== idempotencyKeysPorSocio.length) {
@@ -949,7 +1636,10 @@ export class CobrosService {
               })
             : [];
 
-        if (cobro.cuotaIds.length > 0 && cuotas.length !== cobro.cuotaIds.length) {
+        if (
+          cobro.cuotaIds.length > 0 &&
+          cuotas.length !== cobro.cuotaIds.length
+        ) {
           throw new CustomError(
             'Una o mas cuotas seleccionadas no existen o no pertenecen al socio',
             400,
@@ -982,14 +1672,19 @@ export class CobrosService {
         );
 
         totalCuotasCentsPorSocio.set(cobro.socioId, totalCuotasSocioCents);
-        totalConceptosCentsPorSocio.set(cobro.socioId, totalConceptosSocioCents);
+        totalConceptosCentsPorSocio.set(
+          cobro.socioId,
+          totalConceptosSocioCents,
+        );
         totalCuotasCents += totalCuotasSocioCents;
         totalConceptosCents += totalConceptosSocioCents;
       }
 
       const totalCalculadoCents = totalCuotasCents + totalConceptosCents;
       const totalInformadoCents = this.toCents(Number(dto.total));
-      if (totalCalculadoCents !== totalInformadoCents) {
+      // NOTE: dto.total es la suma de cargos brutos (sin crédito).
+      // La validación se relaja a >= para permitir que el crédito grupal reduzca el monto neto.
+      if (totalInformadoCents < totalCalculadoCents) {
         throw new CustomError(
           'El total informado no coincide con la suma de cuotas y conceptos',
           400,
@@ -997,15 +1692,50 @@ export class CobrosService {
         );
       }
 
+      // ==================== CRÉDITO GRUPAL ====================
+      // Apply group credit to reduce cash needed; accumulate any overpayment
+      let montoACobrar = totalCalculadoCents;
+      let creditoGrupalAplicado = 0;
+      let creditoGrupalGenerado = 0;
+      let saldoCreditoGrupalAntes = 0;
+      let saldoCreditoGrupalDespues = 0;
+
+      if (montoACobrar > 0) {
+        const resultAplicar = await this.creditoService.aplicarCreditoGrupal(
+          queryRunner,
+          dto.grupoId,
+          this.fromCents(totalCalculadoCents),
+        );
+        montoACobrar = this.toCents(resultAplicar.montoACobrar);
+        creditoGrupalAplicado = this.toCents(resultAplicar.creditoAplicado);
+        // Track group credit balance before this operation for the summary
+        saldoCreditoGrupalAntes = this.toCents(resultAplicar.creditoAplicado + resultAplicar.nuevoSaldo);
+        saldoCreditoGrupalDespues = this.toCents(resultAplicar.nuevoSaldo);
+      }
+
+      // ==================== VALIDACIÓN DE PAGOS vs montoACobrar ====================
       const totalPagosCents = this.toCents(
         pagosOperacion.reduce((acc, pago) => acc + Number(pago.monto), 0),
       );
-      if (totalPagosCents !== totalInformadoCents) {
+
+      // Validación: pagos deben cubrir montoACobrar (neto tras crédito grupal)
+      if (totalPagosCents < montoACobrar) {
         throw new CustomError(
-          'La suma de importes por metodo debe coincidir con el total informado',
+          'La suma de importes por método debe ser al menos el monto total a cobrar (después de aplicar crédito grupal)',
           400,
           ERROR_CODES.VALIDATION_ERROR,
         );
+      }
+
+      // Si pago > montoACobrar, acumular excedente como crédito grupal
+      const excedenteGrupal = totalPagosCents - montoACobrar;
+      if (excedenteGrupal > 0) {
+        const resultAcumular = await this.creditoService.acumularCreditoGrupal(
+          queryRunner,
+          dto.grupoId,
+          this.fromCents(excedenteGrupal),
+        );
+        creditoGrupalGenerado = this.toCents(resultAcumular.creditoGenerado);
       }
 
       const pagosRestantes = pagosOperacion.map((pago) => ({
@@ -1017,10 +1747,21 @@ export class CobrosService {
       const operacionesCreadas: CobroOperacion[] = [];
       const lineasPendientes: CobroOperacionLinea[] = [];
 
+      // Virtual credit coverage bucket for group: creditoGrupalAplicado covers part of
+      // raw charges before cash is consumed. This allows partial-credit group flows.
+      let creditoGrupalAplicadoRestanteCents = creditoGrupalAplicado;
+
       for (const cobro of cobrosConCuotas) {
         const totalSocioCents =
           (totalCuotasCentsPorSocio.get(cobro.socioId) ?? 0) +
           (totalConceptosCentsPorSocio.get(cobro.socioId) ?? 0);
+        // total: actual cash collected from this member (proportional share of totalPagosCents)
+        // This matches the design decision: CobroOperacion.total is actual money collected,
+        // not the raw charge amount.
+        const totalCashSocioCents =
+          totalCalculadoCents > 0
+            ? Math.round((totalPagosCents * totalSocioCents) / totalCalculadoCents)
+            : totalSocioCents;
 
         const operacion = queryRunner.manager.create(CobroOperacion, {
           socioId: cobro.socioId,
@@ -1032,7 +1773,11 @@ export class CobrosService {
           idempotencyKey: dto.idempotencyKey
             ? `${dto.idempotencyKey}:${cobro.socioId}`
             : undefined,
-          total: this.fromCents(totalSocioCents),
+          total: this.fromCents(totalCashSocioCents),
+          totalCargos: this.fromCents(totalSocioCents),
+          creditoAplicado: this.fromCents(creditoGrupalAplicado > 0 ? Math.round(creditoGrupalAplicado * totalSocioCents / totalCalculadoCents) : 0),
+          creditoGenerado: this.fromCents(creditoGrupalGenerado),
+          grupoFamiliarId: dto.grupoId,
           referencia: dto.installationId,
           observaciones: `Cobro grupal familiar`,
         });
@@ -1052,6 +1797,19 @@ export class CobrosService {
           );
 
           let restanteCuotaCents = this.toCents(Number(cuota.monto));
+
+          // First: apply group credit to this quota (virtual payment)
+          if (creditoGrupalAplicadoRestanteCents > 0 && restanteCuotaCents > 0) {
+            const cubiertoPorCredito = Math.min(
+              restanteCuotaCents,
+              creditoGrupalAplicadoRestanteCents,
+            );
+            if (cubiertoPorCredito > 0) {
+              restanteCuotaCents -= cubiertoPorCredito;
+              creditoGrupalAplicadoRestanteCents -= cubiertoPorCredito;
+            }
+          }
+
           for (const pagoMetodo of pagosRestantes) {
             if (restanteCuotaCents <= 0) {
               break;
@@ -1061,7 +1819,10 @@ export class CobrosService {
               continue;
             }
 
-            const aplicadoCents = Math.min(restanteCuotaCents, pagoMetodo.cents);
+            const aplicadoCents = Math.min(
+              restanteCuotaCents,
+              pagoMetodo.cents,
+            );
             if (aplicadoCents <= 0) {
               continue;
             }
@@ -1075,7 +1836,9 @@ export class CobrosService {
               fechaEmisionCuota: cuota.createdAt,
               operacionCobroId: operacionGuardada.id,
               cobradorId:
-                dto.actorCobro === ActorCobro.COBRADOR ? dto.cobradorId : undefined,
+                dto.actorCobro === ActorCobro.COBRADOR
+                  ? dto.cobradorId
+                  : undefined,
             });
             await queryRunner.manager.save(pago);
 
@@ -1108,14 +1871,24 @@ export class CobrosService {
           );
         }
 
-        await this.recalcularEstadoSocioPorMorosidad(queryRunner, cobro.socioId);
+        await this.recalcularEstadoSocioPorMorosidad(
+          queryRunner,
+          cobro.socioId,
+        );
       }
 
       const restantePagosCents = pagosRestantes.reduce(
         (acc, pago) => acc + pago.cents,
         0,
       );
-      if (restantePagosCents !== totalConceptosCents) {
+      // When credit is applied (creditoGrupalAplicado > 0), cash covers only the net amount.
+      // The credit bucket covers the difference, so remaining cash may equal conceptos
+      // even if cash < original cuotas+conceptos. Skip this check when credit was applied.
+      if (
+        creditoGrupalGenerado === 0 &&
+        creditoGrupalAplicado === 0 &&
+        restantePagosCents !== totalConceptosCents
+      ) {
         throw new CustomError(
           'La distribucion por metodo no coincide con la composicion de cuotas y conceptos',
           400,
@@ -1128,29 +1901,36 @@ export class CobrosService {
         typeof dto.cobradorId === 'number' &&
         operacionesCreadas.length > 0
       ) {
-        const fechaOperacion = operacionesCreadas[0].fechaHoraServidor ?? new Date();
+        const fechaOperacion =
+          operacionesCreadas[0].fechaHoraServidor ?? new Date();
         const porcentajeComision = await this.obtenerPorcentajeComisionVigente(
           queryRunner,
           dto.cobradorId,
           fechaOperacion,
         );
-        const montoComision = this.fromCents(
-          this.toCents(this.fromCents(totalInformadoCents) * porcentajeComision),
-        );
 
-        const movimientoComision = queryRunner.manager.create(
-          CobradorCuentaCorrienteMovimiento,
-          {
-            cobradorId: dto.cobradorId,
-            tipoMovimiento: TipoMovimientoCobrador.COMISION_GENERADA,
-            monto: montoComision,
-            cobroOperacionId: operacionesCreadas[0].id,
-            referencia: dto.installationId,
-            observacion: `Comision ${Number(porcentajeComision * 100).toFixed(2)}% generada por cobro grupal`,
-          },
-        );
+        for (const op of operacionesCreadas) {
+          const opTotalCargosCents = this.toCents(Number(op.totalCargos));
+          const montoComision = this.fromCents(
+            this.toCents(
+              this.fromCents(opTotalCargosCents) * porcentajeComision,
+            ),
+          );
 
-        await queryRunner.manager.save(movimientoComision);
+          const movimientoComision = queryRunner.manager.create(
+            CobradorCuentaCorrienteMovimiento,
+            {
+              cobradorId: dto.cobradorId,
+              tipoMovimiento: TipoMovimientoCobrador.COMISION_GENERADA,
+              monto: montoComision,
+              cobroOperacionId: op.id,
+              referencia: dto.installationId,
+              observacion: `Comision ${Number(porcentajeComision * 100).toFixed(2)}% generada por cobro grupal`,
+            },
+          );
+
+          await queryRunner.manager.save(movimientoComision);
+        }
       }
 
       if (lineasPendientes.length > 0) {
@@ -1159,13 +1939,37 @@ export class CobrosService {
 
       await queryRunner.commitTransaction();
 
-      const operacionesCompletas = await queryRunner.manager.find(CobroOperacion, {
-        where: { id: In(operacionesCreadas.map((operacion) => operacion.id)) },
-        relations: ['lineas', 'socio', 'metodoPago'],
-      });
+      const operacionesCompletas = await queryRunner.manager.find(
+        CobroOperacion,
+        {
+          where: {
+            id: In(operacionesCreadas.map((operacion) => operacion.id)),
+          },
+          relations: ['lineas', 'socio', 'metodoPago'],
+        },
+      );
 
-      const mapaOperaciones = new Map(operacionesCompletas.map((op) => [op.id, op]));
-      return operacionesCreadas.map((operacion) => mapaOperaciones.get(operacion.id) ?? operacion);
+      const mapaOperaciones = new Map(
+        operacionesCompletas.map((op) => [op.id, op]),
+      );
+
+      // Build per-member credit summary from group-level totals
+      const grupoSummary: import('./dto/cobros.dto').CobroOperacionCreditoSummary = {
+        totalCargos: this.fromCents(totalCalculadoCents),
+        creditoAplicado: this.fromCents(creditoGrupalAplicado),
+        creditoGenerado: this.fromCents(creditoGrupalGenerado),
+        montoACobrar: this.fromCents(montoACobrar),
+        creditoDisponible: this.fromCents(saldoCreditoGrupalAntes),
+        saldoCreditoDespues: this.fromCents(saldoCreditoGrupalDespues),
+      };
+
+      return operacionesCreadas.map((operacion) => {
+        const op = mapaOperaciones.get(operacion.id) ?? operacion;
+        return {
+          ...op,
+          credito: grupoSummary,
+        };
+      });
     } catch (error) {
       await queryRunner.rollbackTransaction();
       const fkError = this.mapearErrorIntegridadReferencial(error);
@@ -1200,7 +2004,7 @@ export class CobrosService {
       const cuotaIdsUnicos = Array.from(new Set(dto.cuotaIds));
       const cuotas = await queryRunner.manager.find(Cuota, {
         where: { id: In(cuotaIdsUnicos), socioId: dto.socioId },
-        relations: ['socio'],
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (cuotas.length !== cuotaIdsUnicos.length) {
@@ -1240,12 +2044,44 @@ export class CobrosService {
         dto.pagos.reduce((acc, pago) => acc + Number(pago.monto), 0),
       );
 
-      if (totalCuotasCents !== totalPagosCents) {
+      // ==================== CRÉDITO INDIVIDUAL ====================
+      let montoACobrar = totalCuotasCents;
+      let creditoAplicado = 0;
+      let saldoCreditoDespues = 0;
+      let saldoCreditoAntes = 0;
+
+      if (totalCuotasCents > 0) {
+        const resultAplicar = await this.creditoService.aplicarCreditoIndividual(
+          queryRunner,
+          dto.socioId,
+          this.fromCents(totalCuotasCents),
+        );
+        montoACobrar = this.toCents(resultAplicar.montoACobrar);
+        creditoAplicado = this.toCents(resultAplicar.creditoAplicado);
+        saldoCreditoAntes = this.toCents(resultAplicar.creditoAplicado + resultAplicar.nuevoSaldo);
+        saldoCreditoDespues = this.toCents(resultAplicar.nuevoSaldo);
+      }
+
+      // Validación: pagos deben cubrir montoACobrar (neto tras crédito)
+      if (totalPagosCents < montoACobrar) {
         throw new CustomError(
-          'La suma de importes por metodo debe coincidir con el total de cuotas seleccionadas',
+          'La suma de importes por método debe ser al menos el monto total a cobrar (después de aplicar crédito)',
           400,
           ERROR_CODES.VALIDATION_ERROR,
         );
+      }
+
+      // Si pago > montoACobrar, acumular excedente como crédito
+      let creditoGenerado = 0;
+      const excedente = totalPagosCents - montoACobrar;
+      if (excedente > 0) {
+        const resultAcumular = await this.creditoService.acumularCreditoIndividual(
+          queryRunner,
+          dto.socioId,
+          this.fromCents(excedente),
+        );
+        creditoGenerado = this.toCents(resultAcumular.creditoGenerado);
+        saldoCreditoDespues = this.toCents(resultAcumular.nuevoSaldo);
       }
 
       const fechaPago = new Date();
@@ -1259,9 +2095,25 @@ export class CobrosService {
 
       let pagosGenerados = 0;
 
+      // Virtual credit coverage bucket: credit applies to cuotas before cash
+      let creditoAplicadoRestanteCents = creditoAplicado;
+
       for (const cuota of cuotasOrdenadas) {
         let restanteCuotaCents = this.toCents(Number(cuota.monto));
 
+        // First: apply credit to this quota (virtual payment)
+        if (creditoAplicadoRestanteCents > 0 && restanteCuotaCents > 0) {
+          const cubiertoPorCredito = Math.min(
+            restanteCuotaCents,
+            creditoAplicadoRestanteCents,
+          );
+          if (cubiertoPorCredito > 0) {
+            restanteCuotaCents -= cubiertoPorCredito;
+            creditoAplicadoRestanteCents -= cubiertoPorCredito;
+          }
+        }
+
+        // Second: apply cash payments to remaining quota amount
         for (const pagoMetodo of pagosRestantes) {
           if (restanteCuotaCents <= 0) {
             break;
@@ -1308,9 +2160,19 @@ export class CobrosService {
 
       await this.recalcularEstadoSocioPorMorosidad(queryRunner, dto.socioId);
 
-      if (pagosRestantes.some((p) => p.cents !== 0)) {
+      // After credit + cash distribution, remaining cash should be zero
+      // (any excess was already accumulated as creditoGenerado)
+      const restantePagosCents = pagosRestantes.reduce(
+        (acc, p) => acc + p.cents,
+        0,
+      );
+      if (
+        creditoGenerado === 0 &&
+        creditoAplicado === 0 &&
+        restantePagosCents !== 0
+      ) {
         throw new CustomError(
-          'La distribucion de importes quedo incompleta',
+          'La distribución de importes quedó incompleta',
           400,
           ERROR_CODES.VALIDATION_ERROR,
         );
@@ -1374,6 +2236,10 @@ export class CobrosService {
     return Math.round(value * 100);
   }
 
+  private safeSum(values: number[]): number {
+    return Math.round(values.reduce((sum, v) => sum + v, 0));
+  }
+
   private async validarMetodoPagoActivo(
     queryRunner: import('typeorm').QueryRunner,
     metodoPagoId: number,
@@ -1396,7 +2262,9 @@ export class CobrosService {
     queryRunner: import('typeorm').QueryRunner,
     pagos: Pick<PagoMetodoMontoDto, 'metodoPagoId'>[],
   ): Promise<void> {
-    const metodoIds = Array.from(new Set(pagos.map((pago) => pago.metodoPagoId)));
+    const metodoIds = Array.from(
+      new Set(pagos.map((pago) => pago.metodoPagoId)),
+    );
 
     if (metodoIds.length === 0) {
       return;
@@ -1452,8 +2320,26 @@ export class CobrosService {
     );
   }
 
+  private esConflictoUnicoDeIdempotencia(error: unknown): boolean {
+    const driverError = error instanceof QueryFailedError
+      ? error.driverError as { code?: string; constraint?: string; detail?: string }
+      : error as { code?: string; constraint?: string; detail?: string };
+
+    if (driverError?.code !== '23505') {
+      return false;
+    }
+
+    const constraint = driverError.constraint ?? '';
+    const detail = (driverError.detail ?? '').toLowerCase();
+
+    return (
+      constraint === 'uq_cobro_operacion_idempotency' ||
+      detail.includes('idempotency_key')
+    );
+  }
+
   private fromCents(value: number): number {
-    return Number((value / 100).toFixed(2));
+    return Math.round(value / 100);
   }
 
   private async obtenerPorcentajeComisionVigente(
@@ -1461,10 +2347,13 @@ export class CobrosService {
     cobradorId: number,
     fechaOperacion: Date,
   ): Promise<number> {
-    const configuraciones = await queryRunner.manager.find(CobradorComisionConfig, {
-      where: { cobradorId },
-      order: { vigenteDesde: 'ASC' },
-    });
+    const configuraciones = await queryRunner.manager.find(
+      CobradorComisionConfig,
+      {
+        where: { cobradorId },
+        order: { vigenteDesde: 'ASC' },
+      },
+    );
 
     const configVigente = [...configuraciones]
       .reverse()
@@ -1638,6 +2527,7 @@ export class CobrosService {
   ): Promise<CuentaCorriente> {
     const socio = await this.socioRepository.findOne({
       where: { id: socioId },
+      relations: ['creditoIndividual'],
     });
 
     if (!socio) {
@@ -1660,13 +2550,17 @@ export class CobrosService {
 
     const cuotas = await cuotasQuery.orderBy('cuota.periodo', 'DESC').getMany();
 
-    const totalDeuda = cuotas
-      .filter((c) => c.estado === EstadoCuota.PENDIENTE)
-      .reduce((sum, c) => sum + Number(c.monto), 0);
+    const totalDeuda = this.safeSum(
+      cuotas
+        .filter((c) => c.estado === EstadoCuota.PENDIENTE)
+        .map((c) => Number(c.monto)),
+    );
 
-    const totalPagado = cuotas
-      .filter((c) => c.estado === EstadoCuota.PAGADA)
-      .reduce((sum, c) => sum + Number(c.monto), 0);
+    const totalPagado = this.safeSum(
+      cuotas
+        .filter((c) => c.estado === EstadoCuota.PAGADA)
+        .map((c) => Number(c.monto)),
+    );
 
     const mesesAdeudados = cuotas.filter(
       (c) => c.estado === EstadoCuota.PENDIENTE,
@@ -1686,14 +2580,16 @@ export class CobrosService {
           tarjetaCentroEstado: 'RECHAZADA' as const,
           tarjetaCentroDetalle:
             'Tarjeta rechazada. Esta cuota debe abonarla el socio.',
-          tarjetaCentroFechaEstado: cuota.fechaRechazoTarjetaCentro ?? undefined,
+          tarjetaCentroFechaEstado:
+            cuota.fechaRechazoTarjetaCentro ?? undefined,
         };
       }
 
       if (cuota.estado === EstadoCuota.PAGADA) {
         return {
           tarjetaCentroEstado: 'APROBADA' as const,
-          tarjetaCentroDetalle: 'Tarjeta aprobada. Cuota cubierta por convenio.',
+          tarjetaCentroDetalle:
+            'Tarjeta aprobada. Cuota cubierta por convenio.',
           tarjetaCentroFechaEstado: cuota.fechaPago,
         };
       }
@@ -1721,6 +2617,9 @@ export class CobrosService {
       totalDeuda,
       totalPagado,
       mesesAdeudados,
+      creditoIndividual: socio.creditoIndividual
+        ? Number(socio.creditoIndividual.saldo)
+        : 0,
     };
   }
 
@@ -1741,12 +2640,11 @@ export class CobrosService {
       );
     }
 
-    const totalGenerado = cuotas.reduce((sum, c) => sum + Number(c.monto), 0);
+    const totalGenerado = this.safeSum(cuotas.map((c) => Number(c.monto)));
 
     const cuotasPagadas = cuotas.filter((c) => c.estado === EstadoCuota.PAGADA);
-    const totalCobrado = cuotasPagadas.reduce(
-      (sum, c) => sum + Number(c.monto),
-      0,
+    const totalCobrado = this.safeSum(
+      cuotasPagadas.map((c) => Number(c.monto)),
     );
 
     const cuotasPendientes = cuotas.filter(
@@ -1767,10 +2665,16 @@ export class CobrosService {
       .where('cuota.periodo = :periodo', { periodo })
       .getMany();
 
-    const desglosePorMetodoMap = new Map<string, { totalCobrado: number; cantidadPagos: number }>();
+    const desglosePorMetodoMap = new Map<
+      string,
+      { totalCobrado: number; cantidadPagos: number }
+    >();
     for (const pago of pagosDelPeriodo) {
       const nombreMetodo = pago.metodoPago?.nombre ?? 'Sin especificar';
-      const existing = desglosePorMetodoMap.get(nombreMetodo) ?? { totalCobrado: 0, cantidadPagos: 0 };
+      const existing = desglosePorMetodoMap.get(nombreMetodo) ?? {
+        totalCobrado: 0,
+        cantidadPagos: 0,
+      };
       existing.totalCobrado += Number(pago.montoPagado);
       existing.cantidadPagos += 1;
       desglosePorMetodoMap.set(nombreMetodo, existing);
@@ -1788,9 +2692,7 @@ export class CobrosService {
     const cuotasTarjeta = cuotas.filter(
       (c) => c.socio?.tarjetaCentro === true && c.socio?.numeroTarjetaCentro,
     );
-    const sociosConTarjetaIds = new Set(
-      cuotasTarjeta.map((c) => c.socioId),
-    );
+    const sociosConTarjetaIds = new Set(cuotasTarjeta.map((c) => c.socioId));
     const cuotasPagadasTarjeta = cuotasTarjeta.filter(
       (c) => c.estado === EstadoCuota.PAGADA,
     );
@@ -1801,14 +2703,12 @@ export class CobrosService {
     const tarjetaCentro: ResumenTarjetaCentro = {
       sociosConTarjeta: sociosConTarjetaIds.size,
       cuotasPagadasTarjeta: cuotasPagadasTarjeta.length,
-      totalCobradoTarjeta: cuotasPagadasTarjeta.reduce(
-        (sum, c) => sum + Number(c.monto),
-        0,
+      totalCobradoTarjeta: this.safeSum(
+        cuotasPagadasTarjeta.map((c) => Number(c.monto)),
       ),
       cuotasPendientesTarjeta: cuotasPendientesTarjeta.length,
-      totalPendienteTarjeta: cuotasPendientesTarjeta.reduce(
-        (sum, c) => sum + Number(c.monto),
-        0,
+      totalPendienteTarjeta: this.safeSum(
+        cuotasPendientesTarjeta.map((c) => Number(c.monto)),
       ),
     };
 
@@ -1869,7 +2769,10 @@ export class CobrosService {
       .getMany();
 
     const cuotasValidas = cuotas.filter((cuota) => {
-      const numeroTarjeta = cuota.socio?.numeroTarjetaCentro?.replace(/\D/g, '');
+      const numeroTarjeta = cuota.socio?.numeroTarjetaCentro?.replace(
+        /\D/g,
+        '',
+      );
       return Boolean(numeroTarjeta && /^\d{16}$/.test(numeroTarjeta));
     });
 
@@ -1957,11 +2860,10 @@ export class CobrosService {
 
     // Búsqueda por nombre, apellido o DNI del socio
     if (filtros?.busqueda) {
-      const terminoBusqueda = `%${filtros.busqueda}%`;
-      query.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
-        { busqueda: terminoBusqueda },
-      );
+      applyMultiWordSearch(query, filtros.busqueda, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'busqueda');
     }
 
     query.orderBy('socio.apellido', 'ASC').addOrderBy('cuota.periodo', 'DESC');
@@ -1990,11 +2892,10 @@ export class CobrosService {
     const sociosQuery = this.socioRepository.createQueryBuilder('socio');
 
     if (busqueda && busqueda.trim()) {
-      const terminoBusqueda = `%${busqueda.trim()}%`;
-      sociosQuery.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni ILIKE :busqueda)',
-        { busqueda: terminoBusqueda },
-      );
+      applyMultiWordSearch(sociosQuery, busqueda, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'busqueda');
     }
 
     const socios = await sociosQuery
@@ -2190,18 +3091,10 @@ export class CobrosService {
       .addOrderBy('socio.nombre', 'ASC');
 
     if (filtros?.busqueda) {
-      const termino = `%${filtros.busqueda}%`;
-      sociosQuery.andWhere(
-        new Brackets((qb) => {
-          qb.where('unaccent(socio.nombre) ILIKE unaccent(:busqueda)', {
-            busqueda: termino,
-          })
-            .orWhere('unaccent(socio.apellido) ILIKE unaccent(:busqueda)', {
-              busqueda: termino,
-            })
-            .orWhere('socio.dni LIKE :busqueda', { busqueda: termino });
-        }),
-      );
+      applyMultiWordSearch(sociosQuery, filtros.busqueda, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'busqueda');
     }
 
     if (categoriaSocio !== 'TODOS') {
@@ -2490,11 +3383,10 @@ export class CobrosService {
 
     // Filtro por busqueda
     if (query.busqueda) {
-      const termino = `%${query.busqueda}%`;
-      queryBuilder.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
-        { busqueda: termino },
-      );
+      applyMultiWordSearch(queryBuilder, query.busqueda, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'busqueda');
     }
 
     // Obtener total antes de paginar (getCount no funciona con GROUP BY/HAVING)
@@ -2553,9 +3445,8 @@ export class CobrosService {
       const cuotasSocio = cuotasPorSocio.get(socio.id) || [];
       const ultimoPago = ultimoPagoPorSocio.get(socio.id);
 
-      const montoTotalDeuda = cuotasSocio.reduce(
-        (sum, c) => sum + Number(c.monto),
-        0,
+      const montoTotalDeuda = this.safeSum(
+        cuotasSocio.map((c) => Number(c.monto)),
       );
       const periodosAdeudados = cuotasSocio.map((c) => c.periodo).sort();
 
@@ -2595,11 +3486,10 @@ export class CobrosService {
       .having('COUNT(cuota.id) >= :minMeses', { minMeses: 3 });
 
     if (query.busqueda) {
-      const termino = `%${query.busqueda}%`;
-      statsQueryBuilder.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:busqueda) OR unaccent(socio.apellido) ILIKE unaccent(:busqueda) OR socio.dni LIKE :busqueda)',
-        { busqueda: termino },
-      );
+      applyMultiWordSearch(statsQueryBuilder, query.busqueda, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'busqueda');
     }
 
     const allMorosos = await statsQueryBuilder.getMany();
@@ -2625,13 +3515,12 @@ export class CobrosService {
     let tresMeses = 0;
     let cuatroMeses = 0;
     let seisMeses = 0;
-    let montoTotalDeudaAll = 0;
+    const montosAll: number[] = [];
 
     for (const socio of allMorosos) {
       const cuotas = cuotasPorSocioAll.get(socio.id) || [];
       const count = cuotas.length;
-      const monto = cuotas.reduce((sum, c) => sum + Number(c.monto), 0);
-      montoTotalDeudaAll += monto;
+      montosAll.push(...cuotas.map((c) => Number(c.monto)));
 
       if (count === 3) tresMeses++;
       else if (count >= 4 && count < 6) cuatroMeses++;
@@ -2640,7 +3529,7 @@ export class CobrosService {
 
     const estadisticas: MorososStatsDto = {
       totalMorosos: allMorosos.length,
-      montoTotalDeuda: montoTotalDeudaAll,
+      montoTotalDeuda: this.safeSum(montosAll),
       tresMeses,
       cuatroMeses,
       seisMeses,
@@ -2683,8 +3572,11 @@ export class CobrosService {
     let totalCuotasPagadas = 0;
 
     // Acumuladores de método de pago y tarjeta centro consolidado
-    const desglosePorMetodoMapGlobal = new Map<string, { totalCobrado: number; cantidadPagos: number }>();
-    let sociosConTarjetaIdsGlobal = new Set<number>();
+    const desglosePorMetodoMapGlobal = new Map<
+      string,
+      { totalCobrado: number; cantidadPagos: number }
+    >();
+    const sociosConTarjetaIdsGlobal = new Set<number>();
     let totalCuotasPagadasTarjeta = 0;
     let totalCobradoTarjeta = 0;
     let totalCuotasPendientesTarjeta = 0;
@@ -2710,9 +3602,9 @@ export class CobrosService {
         continue;
       }
 
-      const generado = cuotas.reduce((sum, c) => sum + Number(c.monto), 0);
+      const generado = this.safeSum(cuotas.map((c) => Number(c.monto)));
       const pagadas = cuotas.filter((c) => c.estado === EstadoCuota.PAGADA);
-      const cobrado = pagadas.reduce((sum, c) => sum + Number(c.monto), 0);
+      const cobrado = this.safeSum(pagadas.map((c) => Number(c.monto)));
       const pendientes = cuotas.filter(
         (c) => c.estado === EstadoCuota.PENDIENTE,
       );
@@ -2731,8 +3623,8 @@ export class CobrosService {
         morosidad: Math.round(morosidad * 100) / 100,
       });
 
-      totalGenerado += generado;
-      totalCobrado += cobrado;
+      totalGenerado = Math.round(totalGenerado + generado);
+      totalCobrado = Math.round(totalCobrado + cobrado);
       totalCuotasPendientes += pendientes.length;
       totalCuotasPagadas += pagadas.length;
 
@@ -2746,8 +3638,11 @@ export class CobrosService {
 
       for (const pago of pagosDelPeriodo) {
         const nombreMetodo = pago.metodoPago?.nombre ?? 'Sin especificar';
-        const existing = desglosePorMetodoMapGlobal.get(nombreMetodo) ?? { totalCobrado: 0, cantidadPagos: 0 };
-        existing.totalCobrado += Number(pago.montoPagado);
+        const existing = desglosePorMetodoMapGlobal.get(nombreMetodo) ?? {
+          totalCobrado: 0,
+          cantidadPagos: 0,
+        };
+      existing.totalCobrado = Math.round(existing.totalCobrado + Number(pago.montoPagado));
         existing.cantidadPagos += 1;
         desglosePorMetodoMapGlobal.set(nombreMetodo, existing);
       }
@@ -2759,12 +3654,20 @@ export class CobrosService {
       for (const c of cuotasTarjeta) {
         sociosConTarjetaIdsGlobal.add(c.socioId);
       }
-      const pagadasTarjeta = cuotasTarjeta.filter((c) => c.estado === EstadoCuota.PAGADA);
-      const pendientesTarjeta = cuotasTarjeta.filter((c) => c.estado === EstadoCuota.PENDIENTE);
+      const pagadasTarjeta = cuotasTarjeta.filter(
+        (c) => c.estado === EstadoCuota.PAGADA,
+      );
+      const pendientesTarjeta = cuotasTarjeta.filter(
+        (c) => c.estado === EstadoCuota.PENDIENTE,
+      );
       totalCuotasPagadasTarjeta += pagadasTarjeta.length;
-      totalCobradoTarjeta += pagadasTarjeta.reduce((sum, c) => sum + Number(c.monto), 0);
+      totalCobradoTarjeta = Math.round(
+        totalCobradoTarjeta + this.safeSum(pagadasTarjeta.map((c) => Number(c.monto))),
+      );
       totalCuotasPendientesTarjeta += pendientesTarjeta.length;
-      totalPendienteTarjeta += pendientesTarjeta.reduce((sum, c) => sum + Number(c.monto), 0);
+      totalPendienteTarjeta = Math.round(
+        totalPendienteTarjeta + this.safeSum(pendientesTarjeta.map((c) => Number(c.monto))),
+      );
     }
 
     // Calcular promedios del consolidado
@@ -2838,5 +3741,125 @@ export class CobrosService {
     }
 
     return periodos;
+  }
+
+  /**
+   * Registra el pago de todas las cuotas de un año para un socio.
+   * Genera las cuotas que no existan y paga todas las pendientes en una sola transacción.
+   * No dispara notificaciones de morosidad.
+   */
+  async pagoAnual(dto: PagoAnualDto): Promise<PagoAnualResponseDto> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const socio = await queryRunner.manager.findOne(Socio, {
+        where: { id: dto.socioId },
+        relations: ['categoria'],
+      });
+
+      if (!socio) {
+        throw new CustomError(
+          ERROR_MESSAGES.SOCIO_NOT_FOUND,
+          404,
+          ERROR_CODES.SOCIO_NOT_FOUND,
+        );
+      }
+
+      if (!socio.categoria || socio.categoria.exento) {
+        throw new CustomError(
+          'El socio no tiene categoría válida para generar cuotas',
+          400,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      await this.validarMetodoPagoActivo(queryRunner, dto.metodoPagoId);
+
+      // Obtener cuotas existentes del año
+      const cuotasExistentes = await queryRunner.manager
+        .createQueryBuilder(Cuota, 'cuota')
+        .where('cuota.socioId = :socioId', { socioId: dto.socioId })
+        .andWhere('cuota.periodo LIKE :anio', { anio: `${dto.anio}-%` })
+        .getMany();
+
+      const cuotasPorPeriodo = new Map(cuotasExistentes.map((c) => [c.periodo, c]));
+
+      const fechaPago = new Date();
+      let cuotasGeneradas = 0;
+      let cuotasPagadas = 0;
+      let cuotasYaPagadas = 0;
+      let totalPagado = 0;
+      const periodosPagados: string[] = [];
+
+      for (let mes = 1; mes <= 12; mes++) {
+        const periodo = `${dto.anio}-${String(mes).padStart(2, '0')}`;
+        let cuota = cuotasPorPeriodo.get(periodo);
+
+        // Generar cuota si no existe
+        if (!cuota) {
+          cuota = queryRunner.manager.create(Cuota, {
+            socioId: dto.socioId,
+            periodo,
+            monto: socio.categoria!.montoMensual,
+            estado: EstadoCuota.PENDIENTE,
+          });
+          cuota = await queryRunner.manager.save(cuota);
+          cuotasGeneradas++;
+        }
+
+        // Pagar si está pendiente
+        if (cuota.estado === EstadoCuota.PAGADA) {
+          cuotasYaPagadas++;
+          continue;
+        }
+
+        const pago = queryRunner.manager.create(PagoCuota, {
+          cuotaId: cuota.id,
+          montoPagado: cuota.monto,
+          metodoPagoId: dto.metodoPagoId,
+          observaciones: dto.observaciones,
+          fechaPago,
+          fechaEmisionCuota: cuota.createdAt,
+        });
+        await queryRunner.manager.save(pago);
+
+        cuota.estado = EstadoCuota.PAGADA;
+        cuota.fechaPago = fechaPago;
+        await queryRunner.manager.save(cuota);
+
+        totalPagado += Number(cuota.monto);
+        cuotasPagadas++;
+        periodosPagados.push(periodo);
+      }
+
+      await this.recalcularEstadoSocioPorMorosidad(queryRunner, dto.socioId);
+      await queryRunner.commitTransaction();
+
+      return {
+        cuotasGeneradas,
+        cuotasPagadas,
+        cuotasYaPagadas,
+        totalPagado: this.fromCents(this.toCents(totalPagado)),
+        periodosPagados,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(
+        'Error en pago anual',
+        error instanceof Error ? error.stack : String(error),
+      );
+      const fkError = this.mapearErrorIntegridadReferencial(error);
+      if (fkError) throw fkError;
+      if (error instanceof CustomError) throw error;
+      throw new CustomError(
+        ERROR_MESSAGES.ERROR_REGISTRANDO_PAGO,
+        500,
+        ERROR_CODES.INTERNAL_SERVER_ERROR,
+      );
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

@@ -47,6 +47,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# local tooling
+.atl/
+
 # Runtime data
 pids
 *.pid

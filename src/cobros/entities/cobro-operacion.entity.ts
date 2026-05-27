@@ -78,6 +78,19 @@ export class CobroOperacion {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   total!: number;
 
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'total_cargos', nullable: true })
+  totalCargos?: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'credito_aplicado', nullable: true })
+  creditoAplicado?: number;
+
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'credito_generado', nullable: true })
+  creditoGenerado?: number;
+
+  @Column({ name: 'id_grupo_familiar', nullable: true })
+  @Index()
+  grupoFamiliarId?: number;
+
   @Column({ length: 255, nullable: true })
   referencia?: string;
 

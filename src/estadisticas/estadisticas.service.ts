@@ -5,6 +5,7 @@ import { RegistroIngreso } from '../registro-ingreso/entities/registro-ingreso.e
 import { StatisticsResponseDto } from './dto/statistics-response.dto';
 import { TipoIngreso } from '../registro-ingreso/entities/registro-ingreso.entity';
 import { getDayStartEnd } from 'src/util/day-start-end-util';
+import { applyMultiWordSearch, SearchField } from '../common/utils/search.utils';
 
 @Injectable()
 export class EstadisticasService {
@@ -33,41 +34,13 @@ export class EstadisticasService {
 
     // Aplicar filtro de búsqueda si se proporciona searchTerm
     if (searchTerm && searchTerm.trim() !== '') {
-      const term = searchTerm.trim();
-
-      // Separar el término en palabras para búsqueda más inteligente
-      // Ej: "Luciana P" -> ["Luciana", "P"]
-      const words = term.split(/\s+/).filter((w) => w.length > 0);
-
-      if (words.length === 1) {
-        // Búsqueda simple con una sola palabra
-        queryBuilder.andWhere(
-          '(socio.id IS NOT NULL AND (unaccent(socio.nombre) ILIKE unaccent(:term) OR unaccent(socio.apellido) ILIKE unaccent(:term))) OR ' +
-            '(socio.id IS NULL AND (unaccent(registro.nombreNoSocio) ILIKE unaccent(:term) OR unaccent(registro.apellidoNoSocio) ILIKE unaccent(:term)))',
-          { term: `%${words[0]}%` },
-        );
-      } else {
-        // Búsqueda con múltiples palabras - busca coincidencias en nombre y apellido
-        // Para cada palabra, verificamos si coincide con nombre o apellido
-        const conditions: string[] = [];
-        const parameters: Record<string, string> = {};
-
-        words.forEach((word, index) => {
-          const paramKey = `word${index}`;
-          parameters[paramKey] = `%${word}%`;
-          conditions.push(`unaccent(socio.nombre) ILIKE unaccent(:${paramKey})`);
-          conditions.push(`unaccent(socio.apellido) ILIKE unaccent(:${paramKey})`);
-          conditions.push(
-            `unaccent(registro.nombreNoSocio) ILIKE unaccent(:${paramKey})`,
-          );
-          conditions.push(
-            `unaccent(registro.apellidoNoSocio) ILIKE unaccent(:${paramKey})`,
-          );
-        });
-
-        // Usamos OR entre todas las condiciones - si alguna palabra coincide, retorna el registro
-        queryBuilder.andWhere(`(${conditions.join(' OR ')})`, parameters);
-      }
+      const fields: SearchField[] = [
+        { column: 'socio.nombre', useUnaccent: true },
+        { column: 'socio.apellido', useUnaccent: true },
+        { column: 'registro.nombreNoSocio', useUnaccent: true },
+        { column: 'registro.apellidoNoSocio', useUnaccent: true },
+      ];
+      applyMultiWordSearch(queryBuilder, searchTerm, fields, 'word');
     }
 
     // Ordenar y ejecutar query

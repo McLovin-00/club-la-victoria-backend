@@ -223,8 +223,12 @@ export class InitialSchema1700000000000 implements MigrationInterface {
           CONSTRAINT "uq_cobro_operacion_idempotency" UNIQUE ("idempotency_key")
         )
       `);
-      await queryRunner.query(`CREATE INDEX "idx_cobro_operacion_socio" ON "cobro_operacion"("id_socio")`);
-      await queryRunner.query(`CREATE INDEX "idx_cobro_operacion_cobrador" ON "cobro_operacion"("id_cobrador")`);
+      await queryRunner.query(
+        `CREATE INDEX "idx_cobro_operacion_socio" ON "cobro_operacion"("id_socio")`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX "idx_cobro_operacion_cobrador" ON "cobro_operacion"("id_cobrador")`,
+      );
 
       await queryRunner.query(`
         CREATE TABLE "cobro_operacion_linea" (
@@ -239,7 +243,9 @@ export class InitialSchema1700000000000 implements MigrationInterface {
           CONSTRAINT "fk_linea_cuota" FOREIGN KEY ("id_cuota") REFERENCES "cuota"("id_cuota")
         )
       `);
-      await queryRunner.query(`CREATE INDEX "idx_cobro_operacion_linea_operacion" ON "cobro_operacion_linea"("id_cobro_operacion")`);
+      await queryRunner.query(
+        `CREATE INDEX "idx_cobro_operacion_linea_operacion" ON "cobro_operacion_linea"("id_cobro_operacion")`,
+      );
 
       await queryRunner.query(`
         CREATE TABLE "cobrador_cuenta_corriente_movimiento" (
@@ -256,13 +262,17 @@ export class InitialSchema1700000000000 implements MigrationInterface {
           CONSTRAINT "fk_movimiento_operacion" FOREIGN KEY ("id_cobro_operacion") REFERENCES "cobro_operacion"("id_cobro_operacion")
         )
       `);
-      await queryRunner.query(`CREATE INDEX "idx_cobrador_mov_fecha" ON "cobrador_cuenta_corriente_movimiento"("id_cobrador", "created_at")`);
+      await queryRunner.query(
+        `CREATE INDEX "idx_cobrador_mov_fecha" ON "cobrador_cuenta_corriente_movimiento"("id_cobrador", "created_at")`,
+      );
     }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop en orden inverso (respetando foreign keys)
-    await queryRunner.query(`DROP TABLE IF EXISTS "cobrador_cuenta_corriente_movimiento"`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS "cobrador_cuenta_corriente_movimiento"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "cobro_operacion_linea"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "cobro_operacion"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "pago_cuota"`);

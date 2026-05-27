@@ -1,7 +1,9 @@
 import { GrupoFamiliar } from '../../src/grupos-familiares/entities/grupo-familiar.entity';
 import { Socio } from '../../src/socios/entities/socio.entity';
 
-type GrupoFamiliarBuilderOptions = Partial<GrupoFamiliar> & { socios?: Socio[] };
+type GrupoFamiliarBuilderOptions = Partial<GrupoFamiliar> & {
+  socios?: Socio[];
+};
 
 /**
  * Builder para crear instancias de GrupoFamiliar para tests

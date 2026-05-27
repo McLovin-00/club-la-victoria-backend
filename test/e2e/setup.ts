@@ -1,4 +1,8 @@
-import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  INestApplication,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
@@ -17,12 +21,19 @@ export interface E2eContext {
 
 let seedEjecutado = false;
 
-const extraerToken = (body: LoginResponseBody | string, rawText: string): string => {
+const extraerToken = (
+  body: LoginResponseBody | string,
+  rawText: string,
+): string => {
   if (typeof body === 'string' && body.length > 0) {
     return body;
   }
 
-  if (typeof body === 'object' && body !== null && typeof body.token === 'string') {
+  if (
+    typeof body === 'object' &&
+    body !== null &&
+    typeof body.token === 'string'
+  ) {
     return body.token;
   }
 
@@ -69,7 +80,10 @@ export const crearContextoE2e = async (): Promise<E2eContext> => {
   const httpServer = app.getHttpServer();
   const loginResponse = await request(httpServer)
     .post('/api/v1/auth/login')
-    .send({ usuario: process.env.E2E_USER ?? 'admin', password: process.env.E2E_PASS ?? 'admin' })
+    .send({
+      usuario: process.env.E2E_USER ?? 'admin',
+      password: process.env.E2E_PASS ?? 'admin',
+    })
     .expect(201);
 
   const authToken = extraerToken(
@@ -80,7 +94,9 @@ export const crearContextoE2e = async (): Promise<E2eContext> => {
   return { app, authToken };
 };
 
-export const cerrarContextoE2e = async (app: INestApplication): Promise<void> => {
+export const cerrarContextoE2e = async (
+  app: INestApplication,
+): Promise<void> => {
   if (app) {
     await app.close();
   }

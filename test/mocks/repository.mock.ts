@@ -13,10 +13,18 @@ export function createMockRepository<T extends ObjectLiteral>(
     findOneBy: jest.fn().mockResolvedValue(null),
     findOneOrFail: jest.fn().mockResolvedValue(null),
     save: jest.fn().mockResolvedValue({}),
-    update: jest.fn().mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
-    delete: jest.fn().mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
-    softDelete: jest.fn().mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
-    restore: jest.fn().mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
+    update: jest
+      .fn()
+      .mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
+    delete: jest
+      .fn()
+      .mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
+    softDelete: jest
+      .fn()
+      .mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
+    restore: jest
+      .fn()
+      .mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
     create: jest.fn().mockReturnValue({} as T),
     createQueryBuilder: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
@@ -24,13 +32,21 @@ export function createMockRepository<T extends ObjectLiteral>(
     existsBy: jest.fn().mockResolvedValue(false),
     findByIds: jest.fn().mockResolvedValue([]),
     findBy: jest.fn().mockResolvedValue([]),
-    insert: jest.fn().mockResolvedValue({ identifiers: [], generatedMaps: [], raw: [] }),
+    insert: jest
+      .fn()
+      .mockResolvedValue({ identifiers: [], generatedMaps: [], raw: [] }),
     remove: jest.fn().mockResolvedValue({}),
     softRemove: jest.fn().mockResolvedValue({}),
     recover: jest.fn().mockResolvedValue({}),
-    upsert: jest.fn().mockResolvedValue({ identifiers: [], generatedMaps: [], raw: [] }),
-    increment: jest.fn().mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
-    decrement: jest.fn().mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
+    upsert: jest
+      .fn()
+      .mockResolvedValue({ identifiers: [], generatedMaps: [], raw: [] }),
+    increment: jest
+      .fn()
+      .mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
+    decrement: jest
+      .fn()
+      .mockResolvedValue({ affected: 1, generatedMaps: [], raw: [] }),
     extend: jest.fn(),
     target: '',
     manager: {} as Repository<T>['manager'],
@@ -87,16 +103,18 @@ export function createMockRepositoryWithData<
       }),
     update: jest
       .fn()
-      .mockImplementation(async (criteria: { id?: number } | number, updateData: Partial<T>) => {
-        const id = typeof criteria === 'number' ? criteria : criteria.id;
-        const index = data.findIndex((item) => item.id === id);
-        if (index >= 0) {
-          data[index] = { ...data[index], ...updateData } as T;
-          return { affected: 1, generatedMaps: [], raw: [] };
-        }
+      .mockImplementation(
+        async (criteria: { id?: number } | number, updateData: Partial<T>) => {
+          const id = typeof criteria === 'number' ? criteria : criteria.id;
+          const index = data.findIndex((item) => item.id === id);
+          if (index >= 0) {
+            data[index] = { ...data[index], ...updateData } as T;
+            return { affected: 1, generatedMaps: [], raw: [] };
+          }
 
-        return { affected: 0, generatedMaps: [], raw: [] };
-      }),
+          return { affected: 0, generatedMaps: [], raw: [] };
+        },
+      ),
     delete: jest
       .fn()
       .mockImplementation(async (criteria: { id?: number } | number) => {
@@ -109,7 +127,9 @@ export function createMockRepositoryWithData<
 
         return { affected: 0, generatedMaps: [], raw: [] };
       }),
-    create: jest.fn().mockImplementation((entity: Partial<T>) => ({ ...entity } as T)),
+    create: jest
+      .fn()
+      .mockImplementation((entity: Partial<T>) => ({ ...entity }) as T),
     count: jest.fn().mockImplementation(async () => data.length),
   });
 

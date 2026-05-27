@@ -28,6 +28,11 @@ import {
   ERROR_MESSAGES,
 } from '../constants/errors/error-messages';
 import { normalizeComisionPorcentaje } from './utils/comision.util';
+import {
+  applyMultiWordSearch,
+  SOCIO_NAME_DNI_SEARCH_FIELDS,
+} from '../common/utils/search.utils';
+import { CreditoService } from '../credito/credito.service';
 
 @Injectable()
 export class CobradoresService {
@@ -48,6 +53,7 @@ export class CobradoresService {
     private readonly cuotaRepository: Repository<Cuota>,
     @InjectRepository(GrupoFamiliar)
     private readonly grupoFamiliarRepository: Repository<GrupoFamiliar>,
+    private readonly creditoService: CreditoService,
   ) {}
 
   async findActivos(): Promise<Cobrador[]> {
@@ -103,13 +109,12 @@ export class CobradoresService {
         actorCobro: ActorCobro.COBRADOR,
         fechaHoraServidor: Between(desde, hasta),
       },
-      relations: ['lineas', 'lineas.cuota', 'socio', 'metodoPago'],
+      relations: ['lineas', 'lineas.cuota', 'socio', 'socio.creditoIndividual', 'metodoPago'],
       order: { fechaHoraServidor: 'DESC' },
     });
 
-    const totalCobrado = operaciones.reduce(
-      (acc, op) => acc + Number(op.total),
-      0,
+    const totalCobrado = Math.round(
+      operaciones.reduce((acc, op) => acc + Number(op.total), 0),
     );
 
     return {
@@ -154,7 +159,6 @@ export class CobradoresService {
     return this.comisionConfigRepository.save(config);
   }
 
-
   async obtenerComisionVigente(cobradorId: number) {
     const configs = await this.comisionConfigRepository.find({
       where: { cobradorId },
@@ -162,9 +166,7 @@ export class CobradoresService {
     });
 
     const ahora = new Date();
-    const configVigente = configs.find(
-      (cfg) => cfg.vigenteDesde <= ahora,
-    );
+    const configVigente = configs.find((cfg) => cfg.vigenteDesde <= ahora);
 
     return {
       cobradorId,
@@ -231,15 +233,17 @@ export class CobradoresService {
       order: { createdAt: 'DESC' },
     });
 
-    const saldo = movimientos.reduce((acc, mov) => {
-      if (mov.tipoMovimiento === TipoMovimientoCobrador.COMISION_GENERADA) {
+    const saldo = Math.round(
+      movimientos.reduce((acc, mov) => {
+        if (mov.tipoMovimiento === TipoMovimientoCobrador.COMISION_GENERADA) {
+          return acc + Number(mov.monto);
+        }
+        if (mov.tipoMovimiento === TipoMovimientoCobrador.PAGO_A_COBRADOR) {
+          return acc - Number(mov.monto);
+        }
         return acc + Number(mov.monto);
-      }
-      if (mov.tipoMovimiento === TipoMovimientoCobrador.PAGO_A_COBRADOR) {
-        return acc - Number(mov.monto);
-      }
-      return acc + Number(mov.monto);
-    }, 0);
+      }, 0),
+    );
 
     return {
       cobradorId,
@@ -254,9 +258,12 @@ export class CobradoresService {
         );
 
         // Agrupar metodos de pago desde los pagos individuales (PagoCuota)
-        const metodosPagoMap = new Map<number, { id: number; nombre: string; monto: number }>();
+        const metodosPagoMap = new Map<
+          number,
+          { id: number; nombre: string; monto: number }
+        >();
         const pagosOperacion = movimiento.cobroOperacion?.pagos ?? [];
-        
+
         for (const pago of pagosOperacion) {
           if (pago.metodoPago) {
             const existing = metodosPagoMap.get(pago.metodoPago.id);
@@ -271,17 +278,20 @@ export class CobradoresService {
             }
           }
         }
-        
+
         // Si no hay pagos individuales, usar el metodoPago de la operacion como fallback
-        const metodosPago = metodosPagoMap.size > 0 
-          ? Array.from(metodosPagoMap.values())
-          : movimiento.cobroOperacion?.metodoPago
-            ? [{
-                id: movimiento.cobroOperacion.metodoPago.id,
-                nombre: movimiento.cobroOperacion.metodoPago.nombre,
-                monto: Number(movimiento.cobroOperacion.total),
-              }]
-            : [];
+        const metodosPago =
+          metodosPagoMap.size > 0
+            ? Array.from(metodosPagoMap.values())
+            : movimiento.cobroOperacion?.metodoPago
+              ? [
+                  {
+                    id: movimiento.cobroOperacion.metodoPago.id,
+                    nombre: movimiento.cobroOperacion.metodoPago.nombre,
+                    monto: Number(movimiento.cobroOperacion.total),
+                  },
+                ]
+              : [];
 
         const detalleCobro = movimiento.cobroOperacion
           ? {
@@ -294,7 +304,9 @@ export class CobradoresService {
                     grupoFamiliar: movimiento.cobroOperacion.socio.grupoFamiliar
                       ? {
                           id: movimiento.cobroOperacion.socio.grupoFamiliar.id,
-                          nombre: movimiento.cobroOperacion.socio.grupoFamiliar.nombre,
+                          nombre:
+                            movimiento.cobroOperacion.socio.grupoFamiliar
+                              .nombre,
                         }
                       : undefined,
                   }
@@ -327,7 +339,11 @@ export class CobradoresService {
     };
   }
 
-  async buscarSociosMobile(query: string, offset: number = 0, limit: number = 50) {
+  async buscarSociosMobile(
+    query: string,
+    offset: number = 0,
+    limit: number = 50,
+  ) {
     const search = query?.trim();
 
     // Query base para contar total
@@ -340,10 +356,10 @@ export class CobradoresService {
       );
 
     if (search) {
-      countQb.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:term) OR unaccent(socio.apellido) ILIKE unaccent(:term) OR socio.dni LIKE :term)',
-        { term: `%${search}%` },
-      );
+      applyMultiWordSearch(countQb, search, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'term');
     }
 
     const total = await countQb.getCount();
@@ -352,6 +368,7 @@ export class CobradoresService {
     const qb = this.socioRepository
       .createQueryBuilder('socio')
       .leftJoin('socio.grupoFamiliar', 'grupoFamiliar')
+      .leftJoin('socio.creditoIndividual', 'creditoIndividual')
       .leftJoin(
         'socio.cuotas',
         'cuotaPendiente',
@@ -371,20 +388,28 @@ export class CobradoresService {
       .addSelect('socio.estado', 'estado')
       .addSelect('grupoFamiliar.id', 'grupoFamiliarId')
       .addSelect('grupoFamiliar.nombre', 'grupoFamiliarNombre')
-      .addSelect('COUNT(DISTINCT cuotaPendiente.id)', 'cantidadCuotasPendientes')
+      .addSelect(
+        'COALESCE(creditoIndividual.saldo, 0)',
+        'creditoIndividualSaldo',
+      )
+      .addSelect(
+        'COUNT(DISTINCT cuotaPendiente.id)',
+        'cantidadCuotasPendientes',
+      )
       .groupBy('socio.id')
       .addGroupBy('grupoFamiliar.id')
       .addGroupBy('grupoFamiliar.nombre')
+      .addGroupBy('creditoIndividual.saldo')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .offset(offset)
       .limit(limit);
 
     if (search) {
-      qb.andWhere(
-        '(unaccent(socio.nombre) ILIKE unaccent(:term) OR unaccent(socio.apellido) ILIKE unaccent(:term) OR socio.dni LIKE :term)',
-        { term: `%${search}%` },
-      );
+      applyMultiWordSearch(qb, search, SOCIO_NAME_DNI_SEARCH_FIELDS.map(f => ({
+        ...f,
+        column: `socio.${f.column}`,
+      })), 'term');
     }
 
     const rows = await qb.getRawMany();
@@ -397,6 +422,7 @@ export class CobradoresService {
       telefono: row.telefono ?? undefined,
       estado: row.estado,
       cantidadCuotasPendientes: Number(row.cantidadCuotasPendientes ?? 0),
+      creditoIndividual: Number(row.creditoIndividualSaldo ?? 0),
       grupoFamiliar: row.grupoFamiliarId
         ? {
             id: Number(row.grupoFamiliarId),
@@ -411,6 +437,39 @@ export class CobradoresService {
       offset,
       limit,
       hasMore: offset + data.length < total,
+    };
+  }
+
+  async obtenerSocioMobile(socioId: number) {
+    const socio = await this.socioRepository.findOne({
+      where: { id: socioId },
+      relations: ['creditoIndividual', 'grupoFamiliar'],
+    });
+
+    if (!socio) {
+      throw new CustomError(
+        ERROR_MESSAGES.SOCIO_NOT_FOUND,
+        404,
+        ERROR_CODES.SOCIO_NOT_FOUND,
+      );
+    }
+
+    return {
+      id: socio.id,
+      nombre: socio.nombre,
+      apellido: socio.apellido,
+      dni: socio.dni,
+      telefono: socio.telefono,
+      estado: socio.estado,
+      creditoIndividual: socio.creditoIndividual
+        ? Number(socio.creditoIndividual.saldo)
+        : 0,
+      grupoFamiliar: socio.grupoFamiliar
+        ? {
+            id: socio.grupoFamiliar.id,
+            nombre: socio.grupoFamiliar.nombre,
+          }
+        : undefined,
     };
   }
 
@@ -431,6 +490,7 @@ export class CobradoresService {
   async getGruposFamiliaresMobile() {
     const rows = await this.grupoFamiliarRepository
       .createQueryBuilder('grupo')
+      .leftJoin('grupo.creditoGrupal', 'creditoGrupal')
       .leftJoin(
         'grupo.socios',
         'socio',
@@ -453,7 +513,9 @@ export class CobradoresService {
         'miembrosConDeuda',
       )
       .addSelect('COALESCE(SUM(cuotaPendiente.monto), 0)', 'totalPendiente')
+      .addSelect('COALESCE(creditoGrupal.saldo, 0)', 'creditoGrupalSaldo')
       .groupBy('grupo.id')
+      .addGroupBy('creditoGrupal.saldo')
       .orderBy('grupo.orden', 'ASC')
       .addOrderBy('grupo.nombre', 'ASC')
       .getRawMany();
@@ -466,12 +528,14 @@ export class CobradoresService {
       cantidadMiembros: Number(row.cantidadMiembros ?? 0),
       miembrosConDeuda: Number(row.miembrosConDeuda ?? 0),
       totalPendiente: Number(row.totalPendiente ?? 0),
+      creditoGrupal: Number(row.creditoGrupalSaldo ?? 0),
     }));
   }
 
   async getGrupoFamiliarMobile(grupoId: number) {
     const grupo = await this.grupoFamiliarRepository.findOne({
       where: { id: grupoId },
+      relations: ['creditoGrupal'],
     });
 
     if (!grupo) {
@@ -484,6 +548,7 @@ export class CobradoresService {
 
     const miembrosRaw = await this.socioRepository
       .createQueryBuilder('socio')
+      .leftJoin('socio.creditoIndividual', 'creditoIndividual')
       .leftJoin(
         'socio.cuotas',
         'cuotaPendiente',
@@ -495,14 +560,19 @@ export class CobradoresService {
       .addSelect('socio.apellido', 'apellido')
       .addSelect('socio.dni', 'dni')
       .addSelect('socio.telefono', 'telefono')
-      .addSelect('COUNT(DISTINCT cuotaPendiente.id)', 'cantidadCuotasPendientes')
+      .addSelect(
+        'COUNT(DISTINCT cuotaPendiente.id)',
+        'cantidadCuotasPendientes',
+      )
       .addSelect('COALESCE(SUM(cuotaPendiente.monto), 0)', 'totalPendiente')
+      .addSelect('COALESCE(creditoIndividual.saldo, 0)', 'creditoIndividualSaldo')
       .where('socio.id_grupo_familiar = :grupoId', { grupoId })
       .andWhere(
         '(socio.tarjetaCentro = :tarjetaCentro OR socio.tarjetaCentro IS NULL)',
         { tarjetaCentro: false },
       )
       .groupBy('socio.id')
+      .addGroupBy('creditoIndividual.saldo')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .getRawMany();
@@ -515,14 +585,14 @@ export class CobradoresService {
       telefono: row.telefono ?? undefined,
       cantidadCuotasPendientes: Number(row.cantidadCuotasPendientes ?? 0),
       totalPendiente: Number(row.totalPendiente ?? 0),
+      creditoIndividual: Number(row.creditoIndividualSaldo ?? 0),
     }));
 
     const miembrosConDeuda = miembros.filter(
       (miembro) => miembro.cantidadCuotasPendientes > 0,
     ).length;
-    const totalPendiente = miembros.reduce(
-      (acumulado, miembro) => acumulado + miembro.totalPendiente,
-      0,
+    const totalPendiente = Math.round(
+      miembros.reduce((acumulado, miembro) => acumulado + miembro.totalPendiente, 0),
     );
 
     return {
@@ -533,6 +603,9 @@ export class CobradoresService {
       cantidadMiembros: miembros.length,
       miembrosConDeuda,
       totalPendiente,
+      creditoGrupal: grupo.creditoGrupal
+        ? Number(grupo.creditoGrupal.saldo)
+        : 0,
       miembros,
     };
   }
@@ -561,7 +634,10 @@ export class CobradoresService {
     return this.movimientoRepository.save(movimiento);
   }
 
-  async registrarAjuste(cobradorId: number, dto: RegistrarMovimientoCobradorDto) {
+  async registrarAjuste(
+    cobradorId: number,
+    dto: RegistrarMovimientoCobradorDto,
+  ) {
     if (!dto.monto || dto.monto === 0) {
       throw new CustomError(
         'El monto del ajuste no puede ser cero',

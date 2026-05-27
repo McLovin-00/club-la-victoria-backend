@@ -10,16 +10,16 @@ export class CobroBuilder {
 
   constructor(options: CobroBuilderOptions = {}) {
     this.cobro = {
-    id: 1,
-    fecha: new Date('2024-01-15'),
-    monto: 1000 as number,
-    concepto: 'Efectivo',
-    descripcion: 'Cobro de test',
-    nroCuota: 3,
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-15'),
-    ...options,
-  };
+      id: 1,
+      fecha: new Date('2024-01-15'),
+      monto: 1000 as number,
+      concepto: 'Efectivo',
+      descripcion: 'Cobro de test',
+      nroCuota: 3,
+      createdAt: new Date('2024-01-15'),
+      updatedAt: new Date('2024-01-15'),
+      ...options,
+    };
   }
 
   withId(id: number): this {

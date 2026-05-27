@@ -37,8 +37,16 @@ export const configValidationSchema = Joi.object({
     .length(3)
     .default('23f'),
   TARJETA_CENTRO_PERIOD_CONFIG: Joi.string().default('{}'),
-  TARJETA_CENTRO_FALLBACK_HEADER_DAY: Joi.number().integer().min(1).max(31).default(22),
-  TARJETA_CENTRO_FALLBACK_TRAILER_DAY: Joi.number().integer().min(1).max(31).default(23),
+  TARJETA_CENTRO_FALLBACK_HEADER_DAY: Joi.number()
+    .integer()
+    .min(1)
+    .max(31)
+    .default(22),
+  TARJETA_CENTRO_FALLBACK_TRAILER_DAY: Joi.number()
+    .integer()
+    .min(1)
+    .max(31)
+    .default(23),
   TARJETA_CENTRO_FALLBACK_MONTH_LETTER_MAP: Joi.string().default(
     '{"01":"e","02":"f","03":"m","04":"b","05":"y","06":"j","07":"l","08":"a","09":"s","10":"o","11":"n","12":"d"}',
   ),

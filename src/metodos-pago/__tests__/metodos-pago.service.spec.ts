@@ -196,16 +196,19 @@ describe('MetodosPagoService', () => {
     describe('con múltiples métodos de pago', () => {
       it('debería manejar una lista grande de métodos de pago', async () => {
         // Arrange
-        const muchosMétodos: MetodoPago[] = Array.from({ length: 100 }, (_, i) => ({
-          id: i + 1,
-          nombre: `Método ${i + 1}`,
-          descripcion: `Descripción ${i + 1}`,
-          activo: true,
-          orden: i + 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          pagos: [],
-        }));
+        const muchosMétodos: MetodoPago[] = Array.from(
+          { length: 100 },
+          (_, i) => ({
+            id: i + 1,
+            nombre: `Método ${i + 1}`,
+            descripcion: `Descripción ${i + 1}`,
+            activo: true,
+            orden: i + 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            pagos: [],
+          }),
+        );
         (mockQueryBuilder.getMany as jest.Mock).mockResolvedValue(
           muchosMétodos,
         );

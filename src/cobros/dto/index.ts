@@ -37,5 +37,16 @@ export {
   // Desglose método de pago y tarjeta centro
   DesglosePorMetodoPagoDto,
   ResumenTarjetaCentroDto,
+  // Editar operación
+  ActualizarOperacionCobroDto,
+  // Pago anual
+  PagoAnualDto,
+  PagoAnualResponseDto,
+  // Crédito
+  CreditoResumen,
+  CobroOperacionCreditoSummary,
 } from './cobros.dto';
-export { CobroSocioDto, RegistrarCobroGrupalDto } from './registrar-cobro-grupal.dto';
+export {
+  CobroSocioDto,
+  RegistrarCobroGrupalDto,
+} from './registrar-cobro-grupal.dto';

@@ -66,7 +66,7 @@ export class Cuota {
     name: 'fecha_pago',
     nullable: true,
   })
-  fechaPago?: Date;
+  fechaPago?: Date | null;
 
   @ManyToOne(() => Socio, (socio) => socio.cuotas)
   @JoinColumn({ name: 'id_socio' })

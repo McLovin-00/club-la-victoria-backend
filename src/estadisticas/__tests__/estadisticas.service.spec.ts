@@ -130,8 +130,8 @@ describe('EstadisticasService', () => {
     await service.getDailyStatistics('2026-03-10', 'Juan');
 
     expect(queryBuilder.andWhere).toHaveBeenCalledWith(
-      expect.stringContaining('unaccent(socio.nombre) ILIKE unaccent(:term)'),
-      { term: '%Juan%' },
+      expect.stringContaining('unaccent(socio.nombre) ILIKE unaccent(:word0)'),
+      { word0: '%Juan%' },
     );
   });
 
@@ -147,10 +147,11 @@ describe('EstadisticasService', () => {
 
     expect(queryBuilder.andWhere).toHaveBeenCalledWith(
       expect.stringContaining('word0'),
-      {
-        word0: '%Juan%',
-        word1: '%Perez%',
-      },
+      { word0: '%Juan%' },
+    );
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('word1'),
+      { word1: '%Perez%' },
     );
   });
 
@@ -182,7 +183,9 @@ describe('EstadisticasService', () => {
     expect(result.totalIngresosClub).toBe(
       result.totalIngresos - result.totalIngresosPileta,
     );
-    expect(result.totalNoSocios).toBe(result.totalIngresos - result.totalSocios);
+    expect(result.totalNoSocios).toBe(
+      result.totalIngresos - result.totalSocios,
+    );
   });
 
   it('debería devolver respuesta vacía sin errores cuando no hay registros', async () => {

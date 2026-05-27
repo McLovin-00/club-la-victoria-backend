@@ -50,7 +50,9 @@ describe('Auth + Health contract (F01/F02/F39/F41)', () => {
     expect(response.body).toBeDefined();
     expect(Object.keys(response.body).length).toBeGreaterThan(0);
     expect(response.body.statusCode ?? response.status).toBeDefined();
-    expect(response.body.message ?? response.body.info ?? response.body.details).toBeDefined();
+    expect(
+      response.body.message ?? response.body.info ?? response.body.details,
+    ).toBeDefined();
   });
 
   it('GET /api/v1/cobros/socios-elegibles responde 401 sin token', async () => {

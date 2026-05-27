@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Query,
   Param,
@@ -22,9 +23,11 @@ import {
   EstadoPagosQueryDto,
   CuotasQueryDto,
   ProcesarResultadosTarjetaCentroDto,
+  ActualizarOperacionCobroDto,
   // Morosos detallados
   MorososQueryDto,
   TarjetaCentroArchivoQueryDto,
+  PagoAnualDto,
 } from './dto';
 import { TalonarioPdfService } from './services/talonario-pdf.service';
 import { TarjetaCentro23fService } from './services/tarjeta-centro-23f.service';
@@ -136,6 +139,33 @@ export class CobrosController {
   })
   registrarOperacionCobro(@Body() dto: RegistrarOperacionCobroDto) {
     return this.cobrosService.registrarOperacionCobro(dto);
+  }
+
+  @Patch('pagos/operacion/:id')
+  @ApiOperation({
+    summary: 'Actualizar una operación de cobro existente',
+    description:
+      'Permite editar método de pago, cuotas, conceptos y montos de una operación previamente registrada por cobradora.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Operación actualizada exitosamente',
+  })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 404, description: 'Operación no encontrada' })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflicto con estado actual de cuotas',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'No autorizado para editar esta operación',
+  })
+  actualizarOperacionCobro(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ActualizarOperacionCobroDto,
+  ) {
+    return this.cobrosService.actualizarOperacionCobro(id, dto);
   }
 
   @Post('pagos/cuotas-seleccion')
@@ -671,5 +701,21 @@ export class CobrosController {
   })
   registrarCobroGrupal(@Body() dto: import('./dto').RegistrarCobroGrupalDto) {
     return this.cobrosService.registrarCobroGrupal(dto);
+  }
+
+  // ==================== PAGO ANUAL ====================
+
+  @Post('pago-anual')
+  @Private()
+  @ApiOperation({
+    summary: 'Registrar pago anual de cuotas de un socio',
+    description:
+      'Genera las cuotas del año que no existan y paga todas las pendientes en una sola transacción. No aplica Tarjeta del Centro.',
+  })
+  @ApiResponse({ status: 201, description: 'Pago anual registrado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o socio sin categoría' })
+  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  pagoAnual(@Body() dto: PagoAnualDto) {
+    return this.cobrosService.pagoAnual(dto);
   }
 }

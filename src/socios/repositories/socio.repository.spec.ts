@@ -19,7 +19,9 @@ describe('SocioRepository', () => {
   });
 
   it('persiste tarjetaCentro y numeroTarjetaCentro al crear un socio', async () => {
-    const saveSpy = jest.spyOn(repository, 'save').mockImplementation(async (socio) => socio as any);
+    const saveSpy = jest
+      .spyOn(repository, 'save')
+      .mockImplementation(async (socio) => socio as any);
 
     await repository.createSocio({
       nombre: 'Juan',
@@ -44,7 +46,9 @@ describe('SocioRepository', () => {
   });
 
   it('no persiste numeroTarjetaCentro cuando tarjetaCentro es false', async () => {
-    const saveSpy = jest.spyOn(repository, 'save').mockImplementation(async (socio) => socio as any);
+    const saveSpy = jest
+      .spyOn(repository, 'save')
+      .mockImplementation(async (socio) => socio as any);
 
     await repository.createSocio({
       nombre: 'Ana',

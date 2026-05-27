@@ -416,7 +416,9 @@ export class SeedService {
   async runClearDatabase() {
     this.logger.warn('🧹 Iniciando vaciado de tablas de la base de datos...');
     await this.clearDatabaseData();
-    this.logger.warn('🧹 Base de datos vaciada. Ya podés ejecutar el seed que necesites.');
+    this.logger.warn(
+      '🧹 Base de datos vaciada. Ya podés ejecutar el seed que necesites.',
+    );
   }
 
   private async createCobradoresBase() {
@@ -556,7 +558,11 @@ export class SeedService {
   private async createMetodosPago() {
     const metodosPagoBase = [
       { nombre: 'EFECTIVO', descripcion: 'Pago en efectivo', orden: 1 },
-      { nombre: 'TRANSFERENCIA', descripcion: 'Transferencia bancaria', orden: 2 },
+      {
+        nombre: 'TRANSFERENCIA',
+        descripcion: 'Transferencia bancaria',
+        orden: 2,
+      },
     ];
 
     for (const metodo of metodosPagoBase) {
