@@ -102,7 +102,7 @@ import { DatabaseExtensionsService } from './database/database-extensions.servic
           CreditoGrupal,
         ],
 
-        synchronize: configService.getNodeEnv() === 'development',
+        synchronize: false,
       }),
     }),
     CloudinaryModule,

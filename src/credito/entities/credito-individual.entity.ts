@@ -16,8 +16,7 @@ export class CreditoIndividual {
   @PrimaryGeneratedColumn({ name: 'id_credito_individual' })
   id!: number;
 
-  @Column({ name: 'id_socio', unique: true })
-  @Index()
+  @Column({ name: 'id_socio' })
   socioId!: number;
 
   @OneToOne(() => Socio)

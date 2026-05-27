@@ -16,8 +16,7 @@ export class CreditoGrupal {
   @PrimaryGeneratedColumn({ name: 'id_credito_grupal' })
   id!: number;
 
-  @Column({ name: 'id_grupo_familiar', unique: true })
-  @Index()
+  @Column({ name: 'id_grupo_familiar' })
   grupoFamiliarId!: number;
 
   @OneToOne(() => GrupoFamiliar)

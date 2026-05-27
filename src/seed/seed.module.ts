@@ -54,7 +54,7 @@ import {
           CobradorComisionConfig,
           CobradorCuentaCorrienteMovimiento,
         ],
-        synchronize: configService.getNodeEnv() === 'development',
+        synchronize: false,
       }),
     }),
     TypeOrmModule.forFeature([

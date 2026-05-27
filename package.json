@@ -30,7 +30,10 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:run:prod": "node ./node_modules/typeorm/cli.js migration:run --dataSource dist/data-source.js",
     "migration:revert": "npm run typeorm -- migration:revert",
-    "migration:show": "npm run typeorm -- migration:show"
+    "migration:show": "npm run typeorm -- migration:show",
+    "migration:show:prod": "node ./node_modules/typeorm/cli.js migration:show --dataSource dist/data-source.js",
+    "migration:test": "jest migrations --runInBand",
+    "db:verify-migrations": "npm run migration:test && npm run build"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
