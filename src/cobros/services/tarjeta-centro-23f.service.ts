@@ -327,18 +327,9 @@ export class TarjetaCentro23fService {
   }
 
   private generarExtensionArchivoDescarga(fechaDescarga: Date): string {
-    const diaDescarga = format(fechaDescarga, 'dd', {
+    return format(fechaDescarga, 'yyyyMMdd', {
       timeZone: TIMEZONE,
     });
-    const mesDescarga = format(fechaDescarga, 'MM', {
-      timeZone: TIMEZONE,
-    });
-    const monthLetter = this.resolverLetraMesFallback(
-      mesDescarga,
-      this.appConfigService.getTarjetaCentroFallbackMonthLetterMap(),
-    );
-
-    return this.normalizarExtensionArchivo(`${diaDescarga}${monthLetter}`);
   }
 
   private resolverLetraMesFallback(
