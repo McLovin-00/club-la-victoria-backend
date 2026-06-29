@@ -9,14 +9,16 @@ import {
   UseInterceptors,
   UploadedFile,
   Put,
+  Patch,
   ParseIntPipe,
 } from '@nestjs/common';
 import { SociosService } from './socios.service';
 import { CreateSocioDto } from './dto/create-socio.dto';
 import { Private } from '../common/decorators/private.decorator';
-import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UpdateSocioDto } from './dto/update-socio.dto';
+import { UpdateDeclaracionJuradaDto } from './dto/update-declaracion-jurada.dto';
+import { FilterSocioDto } from './dto/filter-socio.dto';
 import {
   ApiTags,
   ApiOperation,
@@ -41,7 +43,7 @@ export class SociosController {
   @ApiOperation({
     summary: 'Listar todos los socios',
     description:
-      'Obtiene una lista paginada de socios con opción de búsqueda por nombre, apellido, DNI o email',
+      'Obtiene una lista paginada de socios con opción de búsqueda por nombre, apellido, DNI o email y filtros por categoría, estado y tarjeta del centro',
   })
   @ApiQuery({
     name: 'page',
@@ -63,13 +65,31 @@ export class SociosController {
     type: String,
     description: 'Texto para búsqueda en nombre, apellido, DNI o email',
   })
+  @ApiQuery({
+    name: 'categoriaId',
+    required: false,
+    type: Number,
+    description: 'Filtrar por ID de categoría',
+  })
+  @ApiQuery({
+    name: 'estado',
+    required: false,
+    type: String,
+    description: 'Filtrar por estado (ACTIVO, INACTIVO, MOROSO)',
+  })
+  @ApiQuery({
+    name: 'tarjetaCentro',
+    required: false,
+    type: Boolean,
+    description: 'Filtrar por tarjeta del centro',
+  })
   @ApiResponse({
     status: 200,
     description: 'Lista de socios obtenida exitosamente',
   })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.sociosService.findAll(paginationDto);
+  findAll(@Query() filterDto: FilterSocioDto) {
+    return this.sociosService.findAll(filterDto);
   }
 
   @Post()
@@ -216,6 +236,23 @@ export class SociosController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.sociosService.findOne(id);
+  }
+
+  @Patch(':id/declaracion-jurada')
+  @Private()
+  @ApiOperation({
+    summary: 'Actualizar declaración jurada',
+    description: 'Actualiza el estado de la declaración jurada de un socio',
+  })
+  @ApiParam({ name: 'id', description: 'ID del socio', type: Number })
+  @ApiResponse({ status: 200, description: 'Declaración jurada actualizada' })
+  @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  updateDeclaracionJurada(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDeclaracionJuradaDto,
+  ) {
+    return this.sociosService.updateDeclaracionJurada(id, dto);
   }
 
   @Delete(':id')

@@ -115,6 +115,30 @@ export class UpdateSocioDto {
   fechaAlta?: string;
 
   @ApiPropertyOptional({
+    description: 'Indica si el socio adherente tiene declaración jurada',
+    example: false,
+  })
+  @Transform(
+    ({ value }) => {
+      if (value === true || value === 'true' || value === 1 || value === '1')
+        return true;
+      if (
+        value === false ||
+        value === 'false' ||
+        value === 0 ||
+        value === '0' ||
+        value === ''
+      )
+        return false;
+      return undefined;
+    },
+    { toClassOnly: true },
+  )
+  @IsBoolean()
+  @IsOptional()
+  declaracionJurada?: boolean;
+
+  @ApiPropertyOptional({
     description: 'Indica si el socio tiene tarjeta del centro',
     example: false,
   })

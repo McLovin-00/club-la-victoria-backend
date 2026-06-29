@@ -19,6 +19,9 @@ export class SocioRepository extends Repository<Socio> {
     page: number = PAGINATION.DEFAULT_PAGE,
     limit: number = PAGINATION.DEFAULT_LIMIT,
     search?: string,
+    categoriaId?: number,
+    estado?: string,
+    tarjetaCentro?: boolean,
   ) {
     const query = this.createQueryBuilder('socio')
       .leftJoinAndSelect('socio.categoria', 'categoria')
@@ -33,6 +36,20 @@ export class SocioRepository extends Repository<Socio> {
         column: `socio.${f.column}`,
       }));
       applyMultiWordSearch(query, search, fields, 'search');
+    }
+
+    if (categoriaId) {
+      query.andWhere('socio.categoria = :categoriaId', { categoriaId });
+    }
+
+    if (estado) {
+      query.andWhere('socio.estado = :estado', { estado });
+    }
+
+    if (tarjetaCentro !== undefined) {
+      query.andWhere('socio.tarjetaCentro = :tarjetaCentro', {
+        tarjetaCentro,
+      });
     }
 
     const [data, total] = await query.getManyAndCount();

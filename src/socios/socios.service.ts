@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SocioRepository } from './repositories/socio.repository';
-import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { CreateSocioDto } from './dto/create-socio.dto';
+import { FilterSocioDto } from './dto/filter-socio.dto';
 import { CloudinaryService } from 'src/cloudinary/cloudinary.service';
 import { CustomError } from 'src/constants/errors/custom-error';
 import { UpdateSocioDto } from './dto/update-socio.dto';
+import { UpdateDeclaracionJuradaDto } from './dto/update-declaracion-jurada.dto';
 import { AsociacionesRepository } from 'src/asociaciones/repositories/asociaciones.repository';
 import { TemporadaPiletaRepository } from 'src/temporadas/repositories/temporada.repository';
 import { LessThanOrEqual, MoreThanOrEqual, DataSource } from 'typeorm';
@@ -260,11 +261,14 @@ export class SociosService {
     }
   }
 
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(filterDto: FilterSocioDto) {
     return await this.socioRepository.findPaginatedAndFiltered(
-      paginationDto.page,
-      paginationDto.limit,
-      paginationDto.search,
+      filterDto.page,
+      filterDto.limit,
+      filterDto.search,
+      filterDto.categoriaId,
+      filterDto.estado,
+      filterDto.tarjetaCentro,
     );
   }
 
@@ -281,6 +285,15 @@ export class SociosService {
       );
     }
     return socio;
+  }
+
+  async updateDeclaracionJurada(
+    id: number,
+    dto: UpdateDeclaracionJuradaDto,
+  ) {
+    const socio = await this.findOne(id);
+    socio.declaracionJurada = dto.declaracionJurada;
+    return this.socioRepository.save(socio);
   }
 
   async remove(id: number) {

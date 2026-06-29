@@ -59,6 +59,9 @@ export class Socio {
   @Column({ length: 50, nullable: true, name: 'numero_tarjeta_centro' })
   numeroTarjetaCentro?: string;
 
+  @Column({ type: 'boolean', default: false, name: 'declaracion_jurada' })
+  declaracionJurada!: boolean;
+
   @ManyToOne(() => CategoriaSocio, { nullable: true })
   @JoinColumn({ name: 'id_categoria' })
   categoria?: CategoriaSocio;
