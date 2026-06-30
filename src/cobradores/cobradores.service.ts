@@ -369,6 +369,7 @@ export class CobradoresService {
       .createQueryBuilder('socio')
       .leftJoin('socio.grupoFamiliar', 'grupoFamiliar')
       .leftJoin('socio.creditoIndividual', 'creditoIndividual')
+      .leftJoin('socio.categoria', 'categoria')
       .leftJoin(
         'socio.cuotas',
         'cuotaPendiente',
@@ -386,6 +387,8 @@ export class CobradoresService {
       .addSelect('socio.dni', 'dni')
       .addSelect('socio.telefono', 'telefono')
       .addSelect('socio.estado', 'estado')
+      .addSelect('socio.declaracionJurada', 'declaracionJurada')
+      .addSelect('categoria.nombre', 'categoriaNombre')
       .addSelect('grupoFamiliar.id', 'grupoFamiliarId')
       .addSelect('grupoFamiliar.nombre', 'grupoFamiliarNombre')
       .addSelect(
@@ -400,6 +403,7 @@ export class CobradoresService {
       .addGroupBy('grupoFamiliar.id')
       .addGroupBy('grupoFamiliar.nombre')
       .addGroupBy('creditoIndividual.saldo')
+      .addGroupBy('categoria.nombre')
       .orderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .offset(offset)
@@ -423,6 +427,8 @@ export class CobradoresService {
       estado: row.estado,
       cantidadCuotasPendientes: Number(row.cantidadCuotasPendientes ?? 0),
       creditoIndividual: Number(row.creditoIndividualSaldo ?? 0),
+      declaracionJurada: Boolean(row.declaracionJurada),
+      categoriaNombre: row.categoriaNombre,
       grupoFamiliar: row.grupoFamiliarId
         ? {
             id: Number(row.grupoFamiliarId),
@@ -443,7 +449,7 @@ export class CobradoresService {
   async obtenerSocioMobile(socioId: number) {
     const socio = await this.socioRepository.findOne({
       where: { id: socioId },
-      relations: ['creditoIndividual', 'grupoFamiliar'],
+      relations: ['creditoIndividual', 'grupoFamiliar', 'categoria'],
     });
 
     if (!socio) {
@@ -461,6 +467,8 @@ export class CobradoresService {
       dni: socio.dni,
       telefono: socio.telefono,
       estado: socio.estado,
+      declaracionJurada: socio.declaracionJurada ?? false,
+      categoriaNombre: socio.categoria?.nombre,
       creditoIndividual: socio.creditoIndividual
         ? Number(socio.creditoIndividual.saldo)
         : 0,
