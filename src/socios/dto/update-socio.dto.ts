@@ -53,7 +53,7 @@ export class UpdateSocioDto {
 
   @ApiPropertyOptional({
     description:
-      'Indica si el socio tiene manualmente una categoría (override)',
+      'Indica si el socio menor de edad tiene declaración jurada',
     example: false,
   })
   @Transform(

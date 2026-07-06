@@ -159,7 +159,7 @@ export class CreateSocioDto {
   categoriaId?: number;
 
   @ApiProperty({
-    description: 'Indica si el socio adherente tiene declaración jurada',
+    description: 'Indica si el socio menor de edad tiene declaración jurada',
     example: false,
     required: false,
   })

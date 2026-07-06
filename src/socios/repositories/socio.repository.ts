@@ -85,6 +85,7 @@ export class SocioRepository extends Repository<Socio> {
     socio.genero = createSocioDto.genero;
     socio.estado = createSocioDto.estado;
     socio.direccion = createSocioDto.direccion;
+    socio.declaracionJurada = createSocioDto.declaracionJurada ?? false;
     socio.tarjetaCentro = createSocioDto.tarjetaCentro ?? false;
     socio.numeroTarjetaCentro = createSocioDto.tarjetaCentro
       ? createSocioDto.numeroTarjetaCentro
