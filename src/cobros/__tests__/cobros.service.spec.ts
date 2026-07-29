@@ -1581,6 +1581,32 @@ describe('CobrosService', () => {
       );
       expect(queryBuilder.getMany).toHaveBeenCalled();
     });
+
+    it('debería ordenar por nombre de grupo antes que por apellido, para mantener juntos a los integrantes de un mismo grupo', async () => {
+      const addOrderByMock = jest.fn().mockReturnThis();
+      const queryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: addOrderByMock,
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+
+      jest
+        .spyOn(cuotaRepository, 'createQueryBuilder')
+        .mockReturnValue(queryBuilder as never);
+
+      await service.obtenerCuotasParaTalonario('2026-04');
+
+      const ordenLlamadas = addOrderByMock.mock.calls.map((c) => c[0]);
+      const idxGrupo = ordenLlamadas.indexOf('grupo.nombre');
+      const idxApellido = ordenLlamadas.indexOf('socio.apellido');
+
+      expect(idxGrupo).toBeGreaterThanOrEqual(0);
+      expect(idxApellido).toBeGreaterThanOrEqual(0);
+      expect(idxGrupo).toBeLessThan(idxApellido);
+    });
   });
 
   describe('actualizarOperacionCobro', () => {

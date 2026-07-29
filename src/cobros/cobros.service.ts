@@ -2727,8 +2727,11 @@ export class CobrosService {
 
   /**
    * Obtiene las cuotas pendientes de un período para generar talonario
-   * Ordena primero por grupo familiar (campo orden), luego alfabéticamente por apellido y nombre
-   * Los socios sin grupo familiar aparecen al final
+   * Ordena primero por grupo familiar (campo orden), luego por nombre del
+   * grupo, y por último alfabéticamente por apellido y nombre del socio.
+   * Esto garantiza que los integrantes de un mismo grupo queden juntos
+   * aunque compartan apellido con socios de otros grupos.
+   * Los socios sin grupo familiar aparecen al final.
    */
   async obtenerCuotasParaTalonario(periodo: string): Promise<Cuota[]> {
     const cuotas = await this.cuotaRepository
@@ -2742,6 +2745,7 @@ export class CobrosService {
         { tarjetaCentro: false },
       )
       .orderBy('COALESCE(grupo.orden, 999999)', 'ASC')
+      .addOrderBy('grupo.nombre', 'ASC')
       .addOrderBy('socio.apellido', 'ASC')
       .addOrderBy('socio.nombre', 'ASC')
       .getMany();
