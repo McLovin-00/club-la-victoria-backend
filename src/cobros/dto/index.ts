@@ -7,6 +7,7 @@ export {
   MisCobranzasRangoDto,
   RegistrarPagoCuotasSeleccionadasDto,
   ReciboMultipleCuotasDto,
+  ImprimirRecibosMorososDto,
   PagoMetodoMontoDto,
   CuentaCorrienteQueryDto,
   ReporteCobranzaQueryDto,

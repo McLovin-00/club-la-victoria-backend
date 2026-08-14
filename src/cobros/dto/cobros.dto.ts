@@ -502,6 +502,30 @@ export class ReciboMultipleCuotasDto {
   cuotaIds!: number[];
 }
 
+export class ImprimirRecibosMorososDto {
+  @ApiProperty({
+    description: 'Periodos a incluir en el talonario (formato YYYY-MM)',
+    example: ['2026-03'],
+    type: [String],
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Debe seleccionar al menos un período' })
+  @IsString({ each: true })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { each: true, message: 'Cada período debe tener formato YYYY-MM' })
+  periodos!: string[];
+
+  @ApiProperty({
+    description: 'IDs específicos de socios morosos a incluir. Si se omite, incluye todos los morosos con cuotas en los periodos.',
+    example: [12, 45],
+    type: [Number],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  socioIds?: number[];
+}
+
 export class ProcesarResultadosTarjetaCentroDto {
   @ApiProperty({
     description: 'Resultados de procesamiento por cuota de tarjeta del centro',

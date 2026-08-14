@@ -41,6 +41,7 @@ import {
   RegistrarCobroGrupalDto,
   RegistrarPagoCuotasSeleccionadasDto,
   ReciboMultipleCuotasDto,
+  ImprimirRecibosMorososDto,
   PagoMetodoMontoDto,
   GenerarCuotasSeleccionDto,
   ActualizarOperacionCobroDto,
@@ -2230,6 +2231,30 @@ export class CobrosService {
     }
 
     return cuotas;
+  }
+
+  async obtenerCuotasParaReciboMorosos(
+    dto: ImprimirRecibosMorososDto,
+  ): Promise<Cuota[]> {
+    // Construir query base: cuotas PENDIENTES en los periodos solicitados
+    const queryBuilder = this.cuotaRepository
+      .createQueryBuilder('cuota')
+      .innerJoinAndSelect('cuota.socio', 'socio')
+      .leftJoinAndSelect('socio.grupoFamiliar', 'grupoFamiliar')
+      .where('cuota.estado = :estado', { estado: EstadoCuota.PENDIENTE })
+      .andWhere('cuota.periodo IN (:...periodos)', { periodos: dto.periodos })
+      .orderBy('socio.apellido', 'ASC')
+      .addOrderBy('socio.nombre', 'ASC')
+      .addOrderBy('cuota.periodo', 'ASC');
+
+    // Filtrar por socios: si vienen socioIds, solo esos; sino, solo socios en estado MOROSO
+    if (dto.socioIds && dto.socioIds.length > 0) {
+      queryBuilder.andWhere('socio.id IN (:...socioIds)', { socioIds: dto.socioIds });
+    } else {
+      queryBuilder.andWhere('socio.estado = :socioEstado', { socioEstado: 'MOROSO' });
+    }
+
+    return await queryBuilder.getMany();
   }
 
   private toCents(value: number): number {

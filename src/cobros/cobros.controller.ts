@@ -18,6 +18,7 @@ import {
   RegistrarOperacionCobroDto,
   RegistrarPagoCuotasSeleccionadasDto,
   ReciboMultipleCuotasDto,
+  ImprimirRecibosMorososDto,
   ReporteCobranzaQueryDto,
   GenerarCuotasSeleccionDto,
   EstadoPagosQueryDto,
@@ -40,6 +41,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { EstadoCuota } from './entities/cuota.entity';
+import { CustomError } from 'src/constants/errors/custom-error';
+import { ERROR_CODES } from 'src/constants/errors/error-messages';
 
 @ApiTags('cobros')
 @ApiBearerAuth('JWT-auth')
@@ -600,6 +603,35 @@ export class CobrosController {
       await this.cobrosService.obtenerCuotasParaReciboMultiple(dto);
     const html =
       await this.talonarioPdfService.generarHtmlReciboMultiple(cuotas);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  @Post('morosos/recibo/html')
+  @Private()
+  @ApiOperation({
+    summary: 'Generar HTML de talonario consolidado para socios morosos',
+    description: 'Genera un único HTML con talonarios para múltiples socios morosos, filtrados por periodos específicos. NO crea nuevas cuotas — solo incluye cuotas ya existentes en estado PENDIENTE.',
+  })
+  @ApiResponse({ status: 200, description: 'HTML generado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos (periodos vacíos o mal formados)' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async generarReciboMorososHtml(
+    @Body() dto: ImprimirRecibosMorososDto,
+    @Res() res: Response,
+  ) {
+    const cuotas = await this.cobrosService.obtenerCuotasParaReciboMorosos(dto);
+
+    if (cuotas.length === 0) {
+      throw new CustomError(
+        'No hay cuotas pendientes para los morosos y períodos seleccionados',
+        404,
+        ERROR_CODES.CUOTA_NOT_FOUND,
+      );
+    }
+
+    const html = await this.talonarioPdfService.generarHtmlReciboMultiple(cuotas);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
