@@ -14,6 +14,7 @@ import { CobroOperacionLinea } from '../entities/cobro-operacion-linea.entity';
 import { Socio } from '../../socios/entities/socio.entity';
 import { CustomError } from 'src/constants/errors/custom-error';
 import { NotificacionesService } from '../../notificaciones/notificaciones.service';
+import { TipoNotificacion } from '../../notificaciones/entities/notificacion.entity';
 import { CobradorCuentaCorrienteMovimiento, TipoMovimientoCobrador } from '../../cobradores/entities/cobrador-cuenta-corriente-movimiento.entity';
 import { CobradorDispositivo } from '../../cobradores/entities/cobrador-dispositivo.entity';
 import { ActorCobro } from '../entities/cobro-operacion.entity';
@@ -282,6 +283,87 @@ describe('CobrosService', () => {
 
       expect(result.creadas).toBe(0);
       expect(result.omitidas).toBe(1);
+    });
+  });
+
+  describe('generarCuotasSeleccion', () => {
+    const socioSeleccionado = {
+      id: 42,
+      nombre: 'Test',
+      apellido: 'Member',
+      categoria: { exento: false, montoMensual: 100 },
+    };
+
+    it('warns at three pending quotas and still creates the selected quota', async () => {
+      mockQueryRunner.manager.find
+        .mockResolvedValueOnce([socioSeleccionado])
+        .mockResolvedValueOnce([]);
+      mockQueryRunner.manager.count.mockResolvedValue(3);
+      mockQueryRunner.manager.create.mockReturnValue({
+        socioId: 42,
+        periodo: '2026-11',
+        monto: 100,
+        estado: EstadoCuota.PENDIENTE,
+      });
+      mockQueryRunner.manager.save.mockResolvedValue({ id: 1 });
+
+      const result = await service.generarCuotasSeleccion({
+        periodo: '2026-11',
+        socioIds: [42],
+      });
+
+      expect(result.creadas).toBe(1);
+      expect(result.advertenciasMorosidad).toBe(1);
+      expect(mockNotificacionesService.crearNotificacion).toHaveBeenCalledWith(
+        TipoNotificacion.MOROSIDAD_3_MESES,
+        42,
+        expect.stringContaining('adeuda 3 meses'),
+      );
+      expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks a member MOROSO and skips quota creation at four pending quotas', async () => {
+      mockQueryRunner.manager.find
+        .mockResolvedValueOnce([socioSeleccionado])
+        .mockResolvedValueOnce([]);
+      mockQueryRunner.manager.count.mockResolvedValue(4);
+
+      const result = await service.generarCuotasSeleccion({
+        periodo: '2026-11',
+        socioIds: [42],
+      });
+
+      expect(result.inhabilitados).toBe(1);
+      expect(result.desactivados).toBe(1);
+      expect(result.creadas).toBe(0);
+      expect(mockQueryRunner.manager.update).toHaveBeenCalledWith(
+        Socio,
+        42,
+        { estado: 'MOROSO' },
+      );
+      expect(mockQueryRunner.manager.create).not.toHaveBeenCalled();
+      expect(mockNotificacionesService.crearNotificacion).toHaveBeenCalledWith(
+        TipoNotificacion.INHABILITACION_AUTOMATICA,
+        42,
+        expect.stringContaining('marcado automaticamente como MOROSO'),
+      );
+    });
+
+    it('does not create a duplicate quota for an existing member-period', async () => {
+      mockQueryRunner.manager.find
+        .mockResolvedValueOnce([socioSeleccionado])
+        .mockResolvedValueOnce([{ socioId: 42, periodo: '2026-11' }]);
+      mockQueryRunner.manager.count.mockResolvedValue(0);
+
+      const result = await service.generarCuotasSeleccion({
+        periodo: '2026-11',
+        socioIds: [42],
+      });
+
+      expect(result.creadas).toBe(0);
+      expect(result.omitidas).toBe(1);
+      expect(mockQueryRunner.manager.create).not.toHaveBeenCalled();
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
     });
   });
 

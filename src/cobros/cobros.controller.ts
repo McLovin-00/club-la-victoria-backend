@@ -25,6 +25,7 @@ import {
   CuotasQueryDto,
   ProcesarResultadosTarjetaCentroDto,
   ActualizarOperacionCobroDto,
+  GenerarCuotaMobileDto,
   // Morosos detallados
   MorososQueryDto,
   TarjetaCentroArchivoQueryDto,
@@ -38,6 +39,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
 import { EstadoCuota } from './entities/cuota.entity';
@@ -407,6 +409,34 @@ export class CobrosController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   generarCuotasSeleccion(@Body() dto: GenerarCuotasSeleccionDto) {
     return this.cobrosService.generarCuotasSeleccion(dto);
+  }
+
+  // Intentionally public for the private mobile app; this route is also callable outside the app.
+  @Post('mobile/socios/:socioId/cuotas')
+  @ApiOperation({
+    summary: 'Generate a quota for one mobile member',
+    description:
+      'Unauthenticated endpoint. Each request targets exactly one member and one YYYY-MM period. Applies the existing morosidad warning and MOROSO rules.',
+    security: [],
+  })
+  @ApiParam({
+    name: 'socioId',
+    description: 'ID of the single member for whom to generate a quota',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Quota generation result for one member',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid member ID or period' })
+  generarCuotaMobile(
+    @Param('socioId', ParseIntPipe) socioId: number,
+    @Body() dto: GenerarCuotaMobileDto,
+  ) {
+    return this.cobrosService.generarCuotasSeleccion({
+      periodo: dto.periodo,
+      socioIds: [socioId],
+    });
   }
 
   // ==================== ESTADO DE PAGOS ANUAL ====================

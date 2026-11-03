@@ -18,6 +18,7 @@ export {
   SocioElegibleDto,
   SociosElegiblesResponseDto,
   GenerarCuotasSeleccionDto,
+  GenerarCuotaMobileDto,
   GenerarCuotasSeleccionResponseDto,
   EstadoPagosQueryDto,
   SocioPagosAnualDto,

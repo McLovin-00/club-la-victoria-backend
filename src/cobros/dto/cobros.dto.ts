@@ -619,6 +619,19 @@ export class GenerarCuotasSeleccionDto {
   socioIds!: number[];
 }
 
+export class GenerarCuotaMobileDto {
+  @ApiProperty({
+    description: 'Period for which to generate the member quota (YYYY-MM)',
+    example: '2026-11',
+    pattern: '^\\d{4}-(0[1-9]|1[0-2])$',
+  })
+  @IsString()
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, {
+    message: 'El periodo debe tener el formato YYYY-MM (ej: 2026-02)',
+  })
+  periodo!: string;
+}
+
 export class GenerarCuotasSeleccionResponseDto {
   @ApiProperty({ description: 'Cantidad de cuotas creadas', example: 10 })
   @IsInt()
