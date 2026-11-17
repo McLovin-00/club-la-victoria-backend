@@ -19,6 +19,7 @@ import { CobradorCuentaCorrienteMovimiento, TipoMovimientoCobrador } from '../..
 import { CobradorDispositivo } from '../../cobradores/entities/cobrador-dispositivo.entity';
 import { ActorCobro } from '../entities/cobro-operacion.entity';
 import { CreditoService } from '../../credito/credito.service';
+import { createHash } from 'crypto';
 
 const mockNotificacionesService = {
   crearNotificacion: jest.fn().mockResolvedValue(undefined),
@@ -61,6 +62,7 @@ describe('CobrosService', () => {
     commitTransaction: jest.fn().mockResolvedValue(undefined),
     rollbackTransaction: jest.fn().mockResolvedValue(undefined),
     release: jest.fn().mockResolvedValue(undefined),
+    query: jest.fn(),
     manager: {
       find: jest.fn(),
       findOne: jest.fn(),
@@ -1339,6 +1341,175 @@ describe('CobrosService', () => {
   });
 
   describe('registrarOperacionCobro', () => {
+    const mobilePayment = {
+      periodos: ['2026-11'],
+      pagos: [{ metodoPagoId: 1, monto: 10000 }],
+      cobradorId: 3,
+      installationId: 'device-test',
+      total: 10000,
+      totalCuotasEsperado: 10000,
+      creditoEsperado: 0,
+      idempotencyKey: 'device-test-1',
+    };
+    const mobileHash = (socioId: number, dto: typeof mobilePayment) => createHash('sha256').update(JSON.stringify({
+      socioId,
+      periodos: [...dto.periodos].sort(),
+      pagos: dto.pagos,
+      conceptos: [],
+      cobradorId: dto.cobradorId,
+      installationId: dto.installationId,
+      total: dto.total,
+      totalCuotasEsperado: dto.totalCuotasEsperado,
+      creditoEsperado: dto.creditoEsperado,
+    })).digest('hex');
+
+    it('collects an existing and a new period together and recalculates remaining delinquency', async () => {
+      const oldQuota = { id: 10, socioId: 1, periodo: '2026-10', monto: 10000, estado: EstadoCuota.PENDIENTE };
+      const newQuota = { id: 11, socioId: 1, periodo: '2026-11', monto: 10000, estado: EstadoCuota.PENDIENTE };
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1, estado: 'MOROSO' })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1, categoria: { montoMensual: 10000, exento: false } })
+        .mockResolvedValueOnce({ id: 1, estado: 'MOROSO' })
+        .mockResolvedValueOnce({ id: 99 });
+      mockQueryRunner.manager.find
+        .mockResolvedValueOnce([oldQuota])
+        .mockResolvedValueOnce([oldQuota, newQuota])
+        .mockResolvedValueOnce([]);
+      mockQueryRunner.manager.count.mockResolvedValue(3);
+      mockQueryRunner.manager.create.mockImplementation((_entity, value) => value);
+      mockQueryRunner.manager.save.mockImplementation(async (value) => {
+        if (Array.isArray(value)) return value;
+        if (value.periodo === '2026-11') return { ...value, id: 11 };
+        if (value.actorCobro) return { ...value, id: 99, fechaHoraServidor: new Date() };
+        return value;
+      });
+      mockCreditoService.aplicarCreditoIndividual.mockResolvedValueOnce({
+        creditoAplicado: 7000, nuevoSaldo: 0, montoACobrar: 13000,
+      });
+      const result = await service.registrarCobroPeriodosMobile(1, {
+        ...mobilePayment,
+        periodos: ['2026-10', '2026-11'],
+        totalCuotasEsperado: 20000,
+        creditoEsperado: 7000,
+        total: 13000,
+        pagos: [{ metodoPagoId: 1, monto: 13000 }],
+      });
+      expect(result.id).toBe(99);
+      expect(oldQuota.estado).toBe(EstadoCuota.PAGADA);
+      expect(newQuota.estado).toBe(EstadoCuota.PAGADA);
+      expect(mockQueryRunner.manager.update).toHaveBeenCalledWith(Socio, 1, { estado: 'ACTIVO' });
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalledTimes(1);
+      expect(mockQueryRunner.rollbackTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rolls back a new mobile quota when its current price differs from the preview', async () => {
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1 })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1, categoria: { montoMensual: 12000, exento: false } });
+      mockQueryRunner.manager.find.mockResolvedValueOnce([]);
+      mockQueryRunner.manager.create.mockImplementation((_entity, value) => value);
+      mockQueryRunner.manager.save.mockImplementation(async (value) => ({ ...value, id: 55 }));
+      await expect(service.registrarCobroPeriodosMobile(1, mobilePayment)).rejects.toThrow('revisá el resumen');
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
+      expect(mockCreditoService.aplicarCreditoIndividual).not.toHaveBeenCalled();
+    });
+
+    it('rejects an already paid mobile period before creating or charging anything', async () => {
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1 })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1, categoria: { montoMensual: 10000, exento: false } });
+      mockQueryRunner.manager.find.mockResolvedValueOnce([{ id: 5, periodo: '2026-11', estado: EstadoCuota.PAGADA }]);
+      await expect(service.registrarCobroPeriodosMobile(1, mobilePayment)).rejects.toThrow();
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
+      expect(mockCreditoService.aplicarCreditoIndividual).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the mobile collection if credit changed after the preview', async () => {
+      const cuota = { id: 55, socioId: 1, periodo: '2026-11', monto: 10000, estado: EstadoCuota.PENDIENTE };
+      mockQueryRunner.manager.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1 })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 1, categoria: { montoMensual: 10000, exento: false } });
+      mockQueryRunner.manager.find.mockResolvedValueOnce([]).mockResolvedValueOnce([cuota]);
+      mockQueryRunner.manager.create.mockImplementation((_entity, value) => value);
+      mockQueryRunner.manager.save.mockResolvedValue(cuota);
+      mockCreditoService.aplicarCreditoIndividual.mockResolvedValueOnce({
+        creditoAplicado: 5000, nuevoSaldo: 0, montoACobrar: 5000,
+      });
+      await expect(service.registrarCobroPeriodosMobile(1, mobilePayment)).rejects.toThrow('saldo a favor cambió');
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a mobile retry when the payment methods differ despite the same key', async () => {
+      mockQueryRunner.query.mockResolvedValueOnce([{ request_hash: mobileHash(1, mobilePayment) }]);
+      mockQueryRunner.manager.findOne.mockResolvedValueOnce({
+        id: 99,
+        socioId: 1,
+        cobradorId: 3,
+        total: 10000,
+        lineas: [{ tipoLinea: 'CUOTA', monto: 10000, cuota: { periodo: '2026-11' } }],
+        pagos: [{ metodoPagoId: 1, montoPagado: 10000 }],
+      });
+      await expect(service.registrarCobroPeriodosMobile(1, {
+        periodos: ['2026-11'],
+        pagos: [{ metodoPagoId: 2, monto: 10000 }],
+        cobradorId: 3,
+        installationId: 'device-test',
+        total: 10000,
+        totalCuotasEsperado: 10000,
+        creditoEsperado: 0,
+        idempotencyKey: 'device-test-1',
+      })).rejects.toThrow('La clave de operación ya se usó para otro cobro');
+      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('returns the original operation when the confirmed mobile request is retried unchanged', async () => {
+      const previous = {
+        id: 99,
+        socioId: 1,
+        cobradorId: 3,
+        total: 10000,
+        lineas: [{ tipoLinea: 'CUOTA', monto: 10000, cuota: { periodo: '2026-11' } }],
+        pagos: [{ metodoPagoId: 1, montoPagado: 10000 }],
+      };
+      mockQueryRunner.manager.findOne.mockResolvedValueOnce(previous);
+      mockQueryRunner.query.mockResolvedValueOnce([{ request_hash: mobileHash(1, mobilePayment) }]);
+      expect(await service.registrarCobroPeriodosMobile(1, mobilePayment)).toBe(previous);
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
+      expect(mockCreditoService.aplicarCreditoIndividual).not.toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a mobile retry when the confirmed credit differs despite the same key', async () => {
+      const original = { ...mobilePayment, pagos: [{ metodoPagoId: 1, monto: 5000 }], total: 5000, creditoEsperado: 5000 };
+      mockQueryRunner.query.mockResolvedValueOnce([{ request_hash: mobileHash(1, original) }]);
+      mockQueryRunner.manager.findOne.mockResolvedValueOnce({
+        id: 99,
+        socioId: 1,
+        cobradorId: 3,
+        total: 5000,
+        creditoAplicado: 5000,
+        lineas: [{ tipoLinea: 'CUOTA', monto: 10000, cuota: { periodo: '2026-11' } }],
+        pagos: [{ metodoPagoId: 1, montoPagado: 5000 }],
+      });
+      await expect(service.registrarCobroPeriodosMobile(1, {
+        ...mobilePayment,
+        pagos: [{ metodoPagoId: 1, monto: 5000 }],
+        total: 5000,
+        creditoEsperado: 50000,
+      })).rejects.toThrow('La clave de operación ya se usó para otro cobro');
+      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
     it('debería rechazar cobro mobile si actor COBRADOR no envía cobradorId', async () => {
       mockQueryRunner.manager.findOne.mockResolvedValue(null);
       mockQueryRunner.manager.find.mockResolvedValue([

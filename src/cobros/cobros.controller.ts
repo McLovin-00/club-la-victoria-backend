@@ -26,6 +26,7 @@ import {
   ProcesarResultadosTarjetaCentroDto,
   ActualizarOperacionCobroDto,
   GenerarCuotaMobileDto,
+  RegistrarCobroPeriodosMobileDto,
   // Morosos detallados
   MorososQueryDto,
   TarjetaCentroArchivoQueryDto,
@@ -437,6 +438,29 @@ export class CobrosController {
       periodo: dto.periodo,
       socioIds: [socioId],
     });
+  }
+
+  @Post('mobile/socios/:socioId/cobro-periodos')
+  @ApiOperation({
+    summary: 'Registrar un cobro móvil de varios períodos',
+    description: 'Operación pública para un socio; genera y cobra períodos en una transacción.',
+    security: [],
+  })
+  registrarCobroPeriodosMobile(
+    @Param('socioId', ParseIntPipe) socioId: number,
+    @Body() dto: RegistrarCobroPeriodosMobileDto,
+  ) {
+    return this.cobrosService.registrarCobroPeriodosMobile(socioId, dto);
+  }
+
+  @Get('mobile/socios/:socioId/periodos')
+  @ApiOperation({
+    summary: 'Consultar períodos para cobro móvil',
+    description: 'Consulta pública para un solo socio, con monto mensual y períodos ya pagados.',
+    security: [],
+  })
+  obtenerPeriodosCobroMobile(@Param('socioId', ParseIntPipe) socioId: number) {
+    return this.cobrosService.obtenerPeriodosCobroMobile(socioId);
   }
 
   // ==================== ESTADO DE PAGOS ANUAL ====================

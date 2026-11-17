@@ -1,5 +1,6 @@
 import {
   IsString,
+  IsNotEmpty,
   Matches,
   IsNumber,
   IsInt,
@@ -11,6 +12,7 @@ import {
   IsArray,
   ArrayMinSize,
   ArrayMaxSize,
+  ArrayUnique,
   ValidateNested,
   IsPositive,
   IsDateString,
@@ -630,6 +632,66 @@ export class GenerarCuotaMobileDto {
     message: 'El periodo debe tener el formato YYYY-MM (ej: 2026-02)',
   })
   periodo!: string;
+}
+
+export class RegistrarCobroPeriodosMobileDto {
+  @ApiProperty({ type: [String], example: ['2026-11', '2026-12'] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(120)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { each: true })
+  periodos!: string[];
+
+  @ApiProperty({ type: [PagoMetodoMontoDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => PagoMetodoMontoDto)
+  pagos!: PagoMetodoMontoDto[];
+
+  @ApiProperty({ type: [ConceptoCobroDto], required: false })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConceptoCobroDto)
+  conceptos?: ConceptoCobroDto[];
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  cobradorId!: number;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  installationId!: string;
+
+  @ApiProperty()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  total!: number;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  idempotencyKey!: string;
+
+  @ApiProperty({ description: 'Monto de cuotas mostrado antes de confirmar' })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  totalCuotasEsperado!: number;
+
+  @ApiProperty({ description: 'Saldo a favor mostrado antes de confirmar' })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  creditoEsperado!: number;
 }
 
 export class GenerarCuotasSeleccionResponseDto {
