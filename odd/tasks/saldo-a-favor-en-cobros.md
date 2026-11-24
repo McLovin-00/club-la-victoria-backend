@@ -1,5 +1,5 @@
 # Saldo a favor en cobros de socios
-Objetivo: conservar el saldo sin asignar, aplicarlo en los cobros solicitados y confirmar en móvil el importe vigente. Backend y móvil: `feat/mobile-quota-generation`; web: rama de trabajo por crear. Entrega: `ask-on-risk`. Verificación: Jest, Supertest y Playwright local, con datos ficticios.
+Objetivo: conservar el saldo sin asignar, aplicarlo en los cobros solicitados y confirmar en móvil el importe vigente. Backend y móvil: `feat/mobile-quota-generation`; web: `feat/saldo-a-favor-pago-anual`. Entrega: `ask-on-risk`. Verificación: Jest, Supertest y Playwright local, con datos ficticios.
 
 ## Specs
 
@@ -13,9 +13,9 @@ Objetivo: conservar el saldo sin asignar, aplicarlo en los cobros solicitados y 
 
 ## Tasks
 
-- [x] T1 · S1–S4 · inline, saldo en el anual y rechazo de importes netos desactualizados en el cobro individual. Jest 92/92; revalidación HTTP 4/4. Riesgo: ítem 4 (consumo concurrente del saldo).
-- [x] T2 · S2 · inline, web muestra el descuento y confirma el importe anual. Playwright: RED por resumen sin descuento, GREEN 2/2 con PostgreSQL ficticio. TypeScript OK.
-- [x] T3 · S1, S3–S4 · inline, la app actualiza el total y pide otra confirmación. Jest 17/17 y revalidación 2/2; se mantienen los cambios locales previos.
+- [x] T1 · S1–S4 · inline, saldo en el anual y rechazo de importes netos desactualizados en el cobro individual. Jest 92/92; revalidación HTTP 4/4. Riesgo: ítem 4 (consumo concurrente del saldo). Backend `89d2b05`.
+- [x] T2 · S2 · inline, web muestra el descuento y confirma el importe anual. Playwright: RED por resumen sin descuento, GREEN 2/2 con PostgreSQL ficticio. TypeScript OK. Web `c19546c`.
+- [x] T3 · S1, S3–S4 · inline, la app actualiza el total y pide otra confirmación. Jest 17/17 y revalidación 2/2; se mantienen los cambios locales previos. Móvil `5c12997`.
 - [x] T4 · S1–S4 · verificación independiente del alcance implementado, con datos ficticios. Revalidación de los cuatro bloqueantes aprobada sin publicación.
 - [ ] T5 · S2 · pendiente de definición: determinar si el registro web por lote es un cobro en el momento o una carga posterior de dinero ya recibido.
 
@@ -36,3 +36,5 @@ L5 — La verificación independiente reprodujo dos carreras con un único consu
 L6 — Corrección acotada a esos cuatro hallazgos: conversión exacta en el anual, validación del neto registrado en el reintento y separación del importe manual del calculado en móvil, que ahora refresca el saldo tras un conflicto sin enviar otro POST. RED: dos casos en cada repositorio. GREEN: Jest cobros 92/92 y Jest flujo móvil 17/17, TypeScript móvil y `git diff --check` OK. TypeScript general del backend encuentra errores en fixtures idénticos a la base. Pendiente recheck independiente limitado a los cuatro bloqueantes.
 
 L7 — Revalidación independiente: HTTP/PostgreSQL 4/4 y Jest móvil 2/2. El anual persistió $117.999,50 de $120.000 con $2.000,50 de saldo y conservó una cuota histórica de $10.000,50. Una discrepancia de un centavo devolvió `409` con estado intacto. El reintento con mismo neto devolvió el mismo registro; con neto distinto devolvió `409` sin cambios. En móvil se conservaron $12.000 ingresados y el total se actualizó de $8.000 a $9.000 tras conflicto sin reenviar automáticamente.
+
+L8 — Commits locales sin cambios ajenos. El commit móvil se verificó sobre una copia de `6546dde` con solo esta unidad: flujo de cobro 17/17 y TypeScript OK. Conserva los cambios de interfaz y pruebas que ya estaban en el árbol de trabajo. La entrega futura debe instalar el backend antes que los clientes; no se publicó.
