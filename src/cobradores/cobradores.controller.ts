@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -66,6 +67,21 @@ export class CobradoresController {
       new Date(query.desde),
       new Date(query.hasta),
     );
+  }
+
+  @Get('mobile/rendicion')
+  @ApiOperation({ summary: 'Rendición de la cobradora vinculada a este teléfono' })
+  @ApiResponse({ status: 200, description: 'Mismos datos que la rendición web' })
+  @ApiResponse({ status: 403, description: 'El teléfono no está vinculado' })
+  rendicionMobile(@Query() consulta: Record<string, unknown>) {
+    const installationId = consulta.installationId;
+    if (typeof installationId !== 'string' || installationId.trim().length === 0) {
+      throw new BadRequestException('Indicá un mes válido o un rango de fechas válido de hasta 366 días.');
+    }
+    const { desde, hasta, periodo } = leerConsultaRendicion(
+      Object.fromEntries(Object.entries(consulta).filter(([clave]) => clave !== 'installationId')),
+    );
+    return this.cobradoresService.obtenerRendicionMobile(installationId.trim(), desde, hasta, periodo);
   }
 
   @Get('mobile/socios')

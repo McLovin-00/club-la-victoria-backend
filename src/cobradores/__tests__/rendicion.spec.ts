@@ -1,6 +1,6 @@
 import { armarRendicion, rangoRendicion } from '../utils/rendicion';
-import { CobradoresController } from '../cobradores.controller';
 import { CobradoresService } from '../cobradores.service';
+import { CobradoresController } from '../cobradores.controller';
 import { CobroOperacion } from '../../cobros/entities/cobro-operacion.entity';
 
 const operacion = (datos: Partial<CobroOperacion>): CobroOperacion =>
@@ -80,6 +80,19 @@ describe('Rendición de cobranzas', () => {
     expect(armarRendicion([historico])).toMatchObject({
       cantidadImporteNoVerificable: 1, cobros: [{ recibidoCentavos: null }], porMetodo: [],
     });
+  });
+
+  it('la app usa la cobradora vinculada al teléfono y rechaza un teléfono desconocido', async () => {
+    const servicio = Object.create(CobradoresService.prototype) as any;
+    servicio.dispositivoRepository = { findOne: jest.fn().mockResolvedValue({ cobradorId: 17 }) };
+    servicio.obtenerRendicion = jest.fn().mockResolvedValue({ cobros: [] });
+
+    await servicio.obtenerRendicionMobile('device-1', undefined, undefined, '2026-02');
+
+    expect(servicio.dispositivoRepository.findOne).toHaveBeenCalledWith({ where: { installationId: 'device-1' } });
+    expect(servicio.obtenerRendicion).toHaveBeenCalledWith(17, undefined, undefined, '2026-02');
+    servicio.dispositivoRepository.findOne.mockResolvedValue(null);
+    await expect(servicio.obtenerRendicionMobile('otro')).rejects.toThrow('No autorizado');
   });
 
   it('incluye el residual verificable de un grupo sin asignarle un método inventado', () => {

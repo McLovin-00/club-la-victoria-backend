@@ -15,7 +15,7 @@ Objetivo: exportar la recaudación por período en PDF. Verificación: Jest, Typ
 
 - [ ] T1 · S1–S2 · inline · Fuente y contrato de recaudación protegidos; pruebas de fechas, métodos, datos incompletos, acceso. Riesgo: ítem 2 (informe con datos de socios).
 - [ ] T2 · S1–S3 · inline · Descargar PDF en la web con la sesión actual. Depende de T1.
-- [ ] T3 · S2–S4 · pendiente · Compartir el mismo PDF desde la app; requiere un acceso identificable sin publicar el informe.
+- [x] T3 · S2–S4 · inline · Mis cobranzas elige el mes y comparte el PDF. Usa el teléfono ya vinculado, sin código ni selector. Jest móvil 2/2. La app abierta en el puerto 8081 es una copia vieja; el teléfono no lo muestra hasta instalar la actualización.
 
 ## Log
 
@@ -28,3 +28,7 @@ L3 — Primera unidad: `GET /cobradores/:id/rendicion` usa la sesión web existe
 L4 — Jest específico 2/2; TypeScript web y backend de producción pasó. Playwright web 1/1 con datos ficticios y respuesta de rendición simulada; el proceso que se lanzó antes de cambiar la UI terminó después y dio GREEN, no se afirma RED de navegador. Dos fallas previas del módulo de cobradores siguen fuera de esta unidad. Revalidación independiente de acceso y datos pendiente.
 
 L5 — La primera verificación confirmó GET y HEAD privados (401 sin sesión, 200 autenticado, `private, no-store`), filtrado por cobrador y actor y PDF sin comisión ni DNI. Detectó tres bloqueantes: parámetros de rango ambiguos aceptados, $0 como valor histórico sin evidencia y residual grupal verificable que faltaba. Se agregaron regresiones que dieron RED 3/3; aplicadas las correcciones acotadas, Jest 5/5 y TypeScript para producción aprobado. Pendiente la revalidación limitada a esos tres casos; la zona horaria no se comprobó aún contra PostgreSQL real.
+
+L6 — Recheck HTTP 3/3. El límite inclusivo evita perder la medianoche en PostgreSQL. Commits web `60a460b` y backend `2c14084`.
+
+L7 — El botón no aparecía porque no estaba en la app. Se agregó «Compartir PDF» en Mis cobranzas, con mes anterior y siguiente. Usa el teléfono ya vinculado, sin código. La app abierta en el puerto 8081 es una copia vieja; el celular no lo muestra hasta instalar una APK nueva.

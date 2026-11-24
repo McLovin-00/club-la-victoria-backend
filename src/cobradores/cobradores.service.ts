@@ -154,6 +154,19 @@ export class CobradoresService {
     };
   }
 
+  async obtenerRendicionMobile(
+    installationId: string,
+    desde?: string,
+    hasta?: string,
+    periodo?: string,
+  ) {
+    const vinculo = await this.dispositivoRepository.findOne({ where: { installationId } });
+    if (!vinculo) {
+      throw new CustomError('No autorizado para ver esta rendición', 403, ERROR_CODES.FORBIDDEN);
+    }
+    return this.obtenerRendicion(vinculo.cobradorId, desde, hasta, periodo);
+  }
+
   async configurarComision(
     cobradorId: number,
     dto: ConfigurarComisionCobradorDto,
