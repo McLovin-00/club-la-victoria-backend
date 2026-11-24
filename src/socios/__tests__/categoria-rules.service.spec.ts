@@ -16,6 +16,7 @@ describe('CategoriaRulesService', () => {
     fechaNacimiento: '1990-01-01',
     estado: 'ACTIVO',
     genero: 'MASCULINO',
+    declaracionJurada: false,
     overrideManual: false,
     temporadas: [],
     ingresos: [],
