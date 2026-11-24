@@ -42,7 +42,12 @@ describe('CobradoresService', () => {
         },
         {
           provide: getRepositoryToken(CobroOperacion),
-          useValue: { find: jest.fn(), findOne: jest.fn() },
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            count: jest.fn(),
+            createQueryBuilder: jest.fn(),
+          },
         },
         {
           provide: getRepositoryToken(CobradorComisionConfig),
@@ -138,12 +143,14 @@ describe('CobradoresService', () => {
       dni: '12345678',
       telefono: '1122334455',
       estado: 'ACTIVO',
+      declaracionJurada: false,
+      categoriaNombre: undefined,
       creditoIndividual: 2500,
       grupoFamiliar: { id: 7, nombre: 'Familia Perez' },
     });
     expect(socioRepository.findOne).toHaveBeenCalledWith({
       where: { id: 42 },
-      relations: ['creditoIndividual', 'grupoFamiliar'],
+      relations: ['creditoIndividual', 'grupoFamiliar', 'categoria'],
     });
   });
 
@@ -324,6 +331,8 @@ describe('CobradoresService', () => {
           estado: 'ACTIVO',
           cantidadCuotasPendientes: 0,
           creditoIndividual: 0, // no individual credit
+          declaracionJurada: false,
+          categoriaNombre: undefined,
           grupoFamiliar: undefined,
         },
         {
@@ -335,6 +344,8 @@ describe('CobradoresService', () => {
           estado: 'MOROSO',
           cantidadCuotasPendientes: 5,
           creditoIndividual: 2000, // has individual credit
+          declaracionJurada: false,
+          categoriaNombre: undefined,
           grupoFamiliar: {
             id: 10,
             nombre: 'Familia Lopez',
@@ -484,6 +495,62 @@ describe('CobradoresService', () => {
       await expect(service.getGrupoFamiliarMobile(999)).rejects.toThrow(
         CustomError,
       );
+    });
+  });
+
+  describe('obtenerCobranzasRango', () => {
+    it('debería devolver totalCobrado global en SQL y solo la página solicitada con búsqueda', async () => {
+      const resumenQb = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({
+          total: '10',
+          totalCobrado: '139000',
+        }),
+      };
+
+      const idsQb = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ id: 15 }, { id: 14 }]),
+      };
+
+      jest
+        .spyOn(operacionRepository, 'createQueryBuilder')
+        .mockReturnValueOnce(resumenQb as any)
+        .mockReturnValueOnce(idsQb as any);
+
+      jest.spyOn(operacionRepository, 'find').mockResolvedValue([
+        { id: 14, total: 5000 } as CobroOperacion,
+        { id: 15, total: 10000 } as CobroOperacion,
+      ]);
+
+      const desde = new Date('2026-11-01T03:00:00.000Z');
+      const hasta = new Date('2026-12-01T02:59:59.999Z');
+      const resultado = await service.obtenerCobranzasRango(1, desde, hasta, {
+        q: 'Acosta #1',
+        offset: 0,
+        limit: 2,
+      });
+
+      expect(resultado.total).toBe(10);
+      expect(resultado.totalCobrado).toBe(139000);
+      expect(resultado.offset).toBe(0);
+      expect(resultado.limit).toBe(2);
+      expect(resultado.hasMore).toBe(true);
+      // Preserva el orden descendente de pageIds (15 primero, luego 14)
+      expect(resultado.operaciones.map((op) => op.id)).toEqual([15, 14]);
+      expect(idsQb.offset).toHaveBeenCalledWith(0);
+      expect(idsQb.limit).toHaveBeenCalledWith(2);
     });
   });
 });

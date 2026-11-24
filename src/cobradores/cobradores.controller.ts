@@ -23,6 +23,7 @@ import { leerConsultaRendicion } from './utils/rendicion';
 import {
   ActualizarMovimientoCobradorDto,
   ConfigurarComisionCobradorDto,
+  MisCobranzasQueryDto,
   RangoFechasDto,
   RegistrarMovimientoCobradorDto,
   VincularCobradorDispositivoDto,
@@ -55,17 +56,26 @@ export class CobradoresController {
 
   @Get(':id/mis-cobranzas')
   @ApiOperation({
-    summary: 'Obtener cobranzas del cobrador por rango de fechas',
+    summary:
+      'Obtener cobranzas del cobrador por rango de fechas, búsqueda y paginación',
   })
-  @ApiResponse({ status: 200, description: 'Resumen y detalle de cobranzas' })
+  @ApiResponse({
+    status: 200,
+    description: 'Resumen y detalle paginado de cobranzas',
+  })
   misCobranzas(
     @Param('id', ParseIntPipe) cobradorId: number,
-    @Query() query: RangoFechasDto,
+    @Query() query: MisCobranzasQueryDto,
   ) {
     return this.cobradoresService.obtenerCobranzasRango(
       cobradorId,
       new Date(query.desde),
       new Date(query.hasta),
+      {
+        q: query.q,
+        offset: query.offset,
+        limit: query.limit,
+      },
     );
   }
 

@@ -111,6 +111,8 @@ export function armarRendicion(operaciones: CobroOperacion[]) {
         ? `Cuota${linea.cuota?.periodo ? ` ${linea.cuota.periodo}` : ''}`
         : linea.concepto?.trim() || 'Concepto adicional'),
       recibidoCentavos,
+      creditoAplicadoCentavos: aplicado ?? 0,
+      creditoGeneradoCentavos: excedente ?? 0,
       metodos: [...metodos].map(([metodo, centavos]) => ({ metodo, centavos })),
     };
   });

@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -98,6 +99,40 @@ export class RangoFechasDto {
   })
   @IsDateString()
   hasta!: string;
+}
+
+export class MisCobranzasQueryDto extends RangoFechasDto {
+  @ApiProperty({
+    description: 'Búsqueda por socio (nombre, apellido, DNI), método de pago o número de operación',
+    required: false,
+    example: 'Acosta',
+  })
+  @IsOptional()
+  @IsString()
+  q?: string;
+
+  @ApiProperty({
+    description: 'Desplazamiento para paginación (desde 0)',
+    required: false,
+    example: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+
+  @ApiProperty({
+    description: 'Cantidad máxima de operaciones por página (1 a 100)',
+    required: false,
+    example: 15,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 export class ActualizarMovimientoCobradorDto {
