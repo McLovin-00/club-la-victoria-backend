@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -11,11 +12,13 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Private } from '../common/decorators/private.decorator';
 import { CobradoresService } from './cobradores.service';
+import { leerConsultaRendicion } from './utils/rendicion';
 import {
   ActualizarMovimientoCobradorDto,
   ConfigurarComisionCobradorDto,
@@ -154,6 +157,28 @@ export class CobradoresController {
   })
   cuentaCorriente(@Param('id', ParseIntPipe) cobradorId: number) {
     return this.cobradoresService.listarCuentaCorriente(cobradorId);
+  }
+
+  @Get(':id/rendicion')
+  @Private()
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary: 'Obtener la rendición de cobranzas por período',
+    description: 'Devuelve importes en centavos del dinero recibido, separado por métodos de pago. Los importes no verificables no se imputan a ningún método.',
+  })
+  @ApiQuery({ name: 'periodo', required: false, example: '2026-01', description: 'Mes completo. Alternativo a desde y hasta.' })
+  @ApiQuery({ name: 'desde', required: false, example: '2026-01-01' })
+  @ApiQuery({ name: 'hasta', required: false, example: '2026-01-15' })
+  @ApiResponse({ status: 200, description: 'Detalle de recaudación verificable' })
+  @ApiResponse({ status: 400, description: 'Mes o rango de fechas inválidos' })
+  @ApiResponse({ status: 401, description: 'Se requiere sesión web' })
+  @ApiResponse({ status: 404, description: 'Cobrador no encontrado' })
+  rendicion(
+    @Param('id', ParseIntPipe) cobradorId: number,
+    @Query() consulta: Record<string, unknown>,
+  ) {
+    const { desde, hasta, periodo } = leerConsultaRendicion(consulta);
+    return this.cobradoresService.obtenerRendicion(cobradorId, desde, hasta, periodo);
   }
 
   @Post(':id/cuenta-corriente/pagos')

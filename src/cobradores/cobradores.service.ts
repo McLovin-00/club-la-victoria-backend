@@ -33,6 +33,7 @@ import {
   SOCIO_NAME_DNI_SEARCH_FIELDS,
 } from '../common/utils/search.utils';
 import { CreditoService } from '../credito/credito.service';
+import { armarRendicion, rangoRendicion } from './utils/rendicion';
 
 @Injectable()
 export class CobradoresService {
@@ -123,6 +124,33 @@ export class CobradoresService {
       hasta,
       totalCobrado,
       operaciones,
+    };
+  }
+
+  async obtenerRendicion(cobradorId: number, desde?: string, hasta?: string, periodo?: string) {
+    const rango = rangoRendicion(desde, hasta, periodo);
+    const cobrador = await this.cobradorRepository.findOne({
+      where: { id: cobradorId },
+      select: ['id', 'nombre'],
+    });
+    if (!cobrador) {
+      throw new CustomError('Cobrador no encontrado', 404, ERROR_CODES.SOCIO_NOT_FOUND);
+    }
+    const operaciones = await this.operacionRepository.find({
+      where: {
+        cobradorId,
+        actorCobro: ActorCobro.COBRADOR,
+        fechaHoraServidor: Between(rango.inicio, rango.finInclusivo),
+      },
+      relations: ['socio', 'lineas', 'lineas.cuota', 'pagos', 'pagos.metodoPago'],
+      relationLoadStrategy: 'query',
+      order: { fechaHoraServidor: 'ASC', id: 'ASC' },
+    });
+    return {
+      cobrador: cobrador.nombre,
+      desde: rango.desde,
+      hasta: rango.hasta,
+      ...armarRendicion(operaciones),
     };
   }
 
