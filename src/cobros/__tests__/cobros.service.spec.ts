@@ -17,7 +17,7 @@ import { NotificacionesService } from '../../notificaciones/notificaciones.servi
 import { TipoNotificacion } from '../../notificaciones/entities/notificacion.entity';
 import { CobradorCuentaCorrienteMovimiento, TipoMovimientoCobrador } from '../../cobradores/entities/cobrador-cuenta-corriente-movimiento.entity';
 import { CobradorDispositivo } from '../../cobradores/entities/cobrador-dispositivo.entity';
-import { ActorCobro } from '../entities/cobro-operacion.entity';
+import { ActorCobro, OrigenCobro } from '../entities/cobro-operacion.entity';
 import { CreditoService } from '../../credito/credito.service';
 import { createHash } from 'crypto';
 
@@ -2456,6 +2456,53 @@ describe('CobrosService', () => {
       mockQueryRunner.rollbackTransaction.mockClear();
     });
 
+    it('rechaza cambiar el neto confirmado con una clave de cobro ya usada', async () => {
+      const registrada = { id: 18, socioId: 1, totalCargos: 6000, creditoAplicado: 2500 };
+      const dto = {
+        socioId: 1,
+        cobradorId: 1,
+        conceptos: [{ concepto: 'Inscripción', monto: 6000 }],
+        actorCobro: ActorCobro.COBRADOR,
+        origenCobro: OrigenCobro.MOBILE,
+        metodoPagoId: 1,
+        total: 3500,
+        idempotencyKey: 'reintento-con-neto',
+      };
+      mockQueryRunner.manager.findOne.mockResolvedValueOnce(registrada).mockResolvedValueOnce(registrada);
+
+      await expect(service.registrarOperacionCobro({ ...dto, montoNetoEsperado: 3500 }))
+        .resolves.toEqual(registrada);
+      await expect(service.registrarOperacionCobro({ ...dto, montoNetoEsperado: 5500 }))
+        .rejects.toThrow('La clave de operación ya se usó para otro cobro');
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
+      expect(mockCreditoService.aplicarCreditoIndividual).not.toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalledTimes(1);
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('revierte un cobro de extras si cambió el importe neto confirmado en móvil', async () => {
+      mockCreditoService.aplicarCreditoIndividual.mockResolvedValueOnce({
+        creditoAplicado: 3000, nuevoSaldo: 0, montoACobrar: 7000,
+      });
+      const dto = {
+        socioId: 1,
+        cobradorId: 1,
+        conceptos: [{ concepto: 'Inscripción', monto: 10000 }],
+        actorCobro: ActorCobro.COBRADOR,
+        origenCobro: OrigenCobro.MOBILE,
+        metodoPagoId: 1,
+        total: 8000,
+        montoNetoEsperado: 8000,
+      };
+
+      await expect(service.registrarOperacionCobro(dto))
+        .rejects.toThrow('El importe del cobro cambió');
+      expect(mockCreditoService.acumularCreditoIndividual).not.toHaveBeenCalled();
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
+
     it('debería generar solo 5000 pesos de crédito cuando cobra 15000 por una cuota de 10000', async () => {
       const mockCuota = {
         id: 10,
@@ -3430,6 +3477,7 @@ it('debería acumular crédito grupal cuando el pago supera los cargos netos', a
       const mockQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([]),
       };
       mockQueryRunner.manager.createQueryBuilder.mockReturnValue(mockQb);
@@ -3462,7 +3510,72 @@ it('debería acumular crédito grupal cuando el pago supera los cargos netos', a
       expect(result.periodosPagados).toHaveLength(12);
       expect(result.periodosPagados[0]).toBe('2026-01');
       expect(result.periodosPagados[11]).toBe('2026-12');
+      expect(result.totalPagado).toBe(60000);
+      expect(mockQueryRunner.manager.create).toHaveBeenCalledWith(
+        PagoCuota,
+        expect.objectContaining({ montoPagado: 5000, metodoPagoId: 1 }),
+      );
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it.each([
+      { saldo: 7000, aplicado: 7000, cobrado: 53000 },
+      { saldo: 62000, aplicado: 60000, cobrado: 0 },
+    ])('descuenta $aplicado de saldo en el pago anual y registra $cobrado de ingreso', async ({
+      saldo, aplicado, cobrado,
+    }) => {
+      setupMocksCuotasVacias();
+      mockCreditoService.aplicarCreditoIndividual.mockResolvedValueOnce({
+        creditoAplicado: aplicado,
+        nuevoSaldo: saldo - aplicado,
+        montoACobrar: cobrado,
+      });
+
+      const resultado = await service.pagoAnual({ socioId: 1, anio: 2026, metodoPagoId: 1 });
+
+      expect(mockCreditoService.aplicarCreditoIndividual).toHaveBeenCalledWith(mockQueryRunner, 1, 60000);
+      expect(resultado).toMatchObject({
+        cuotasPagadas: 12, totalPagado: 60000, creditoAplicado: aplicado, montoCobrado: cobrado,
+      });
+      const pagos = mockQueryRunner.manager.create.mock.calls
+        .filter(([entidad]) => entidad === PagoCuota)
+        .map(([, pago]) => pago.montoPagado);
+      expect(pagos).toHaveLength(12);
+      expect(pagos.reduce((suma, monto) => suma + monto, 0)).toBe(cobrado);
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('conserva los centavos del neto confirmado y de cada pago anual', async () => {
+      setupMocksCuotasVacias();
+      mockCreditoService.aplicarCreditoIndividual.mockResolvedValueOnce({
+        creditoAplicado: 2000.5, nuevoSaldo: 0, montoACobrar: 57999.5,
+      });
+
+      const resultado = await service.pagoAnual({
+        socioId: 1, anio: 2026, metodoPagoId: 1, montoCobradoEsperado: 57999.5,
+      });
+
+      expect(resultado).toMatchObject({
+        totalPagado: 60000, creditoAplicado: 2000.5, montoCobrado: 57999.5,
+      });
+      const pagos = mockQueryRunner.manager.create.mock.calls
+        .filter(([entidad]) => entidad === PagoCuota)
+        .map(([, pago]) => pago.montoPagado);
+      expect(pagos).toEqual([2999.5, ...Array(11).fill(5000)]);
+    });
+
+    it('revierte el pago anual si el importe confirmado ya no coincide', async () => {
+      setupMocksCuotasVacias();
+      mockCreditoService.aplicarCreditoIndividual.mockResolvedValueOnce({
+        creditoAplicado: 7000, nuevoSaldo: 0, montoACobrar: 53000,
+      });
+
+      await expect(service.pagoAnual({
+        socioId: 1, anio: 2026, metodoPagoId: 1, montoCobradoEsperado: 52000,
+      })).rejects.toThrow('El importe del pago anual cambió');
+      expect(mockQueryRunner.manager.create).not.toHaveBeenCalledWith(PagoCuota, expect.anything());
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
     });
 
     it('debería omitir cuotas ya pagadas y pagar solo las pendientes', async () => {
@@ -3479,6 +3592,7 @@ it('debería acumular crédito grupal cuando el pago supera los cargos netos', a
       const mockQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue(cuotasExistentes),
       };
       mockQueryRunner.manager.createQueryBuilder.mockReturnValue(mockQb);
@@ -3561,6 +3675,7 @@ it('debería acumular crédito grupal cuando el pago supera los cargos netos', a
       const mockQb = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([]),
       };
       mockQueryRunner.manager.createQueryBuilder.mockReturnValue(mockQb);

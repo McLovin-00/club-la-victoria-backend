@@ -321,6 +321,16 @@ export class RegistrarOperacionCobroDto {
   total?: number;
 
   @ApiProperty({
+    description: 'Importe neto confirmado antes de agregar un excedente voluntario',
+    example: 8000,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  montoNetoEsperado?: number;
+
+  @ApiProperty({
     description: 'Clave de idempotencia para evitar dobles registros',
     required: false,
     example: 'device-abc-20260305-op-0001',
@@ -1329,6 +1339,16 @@ export class PagoAnualDto {
   @Min(1)
   metodoPagoId!: number;
 
+  @ApiProperty({
+    description: 'Importe que se confirmó después de aplicar el saldo a favor',
+    example: 113000,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  montoCobradoEsperado?: number;
+
   @ApiProperty({ description: 'Observaciones opcionales', required: false })
   @IsOptional()
   @IsString()
@@ -1345,8 +1365,14 @@ export class PagoAnualResponseDto {
   @ApiProperty({ description: 'Cuotas que ya estaban pagadas (omitidas)', example: 0 })
   cuotasYaPagadas!: number;
 
-  @ApiProperty({ description: 'Total pagado', example: 120000 })
+  @ApiProperty({ description: 'Total de cuotas saldadas antes de aplicar crédito', example: 120000 })
   totalPagado!: number;
+
+  @ApiProperty({ description: 'Saldo a favor utilizado', example: 7000 })
+  creditoAplicado!: number;
+
+  @ApiProperty({ description: 'Dinero recibido después de aplicar el saldo', example: 113000 })
+  montoCobrado!: number;
 
   @ApiProperty({ description: 'Períodos pagados', example: ['2026-01', '2026-02'] })
   periodosPagados!: string[];

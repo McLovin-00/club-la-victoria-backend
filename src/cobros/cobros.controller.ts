@@ -143,6 +143,7 @@ export class CobrosController {
     status: 201,
     description: 'Operación registrada exitosamente',
   })
+  @ApiResponse({ status: 409, description: 'Una cuota ya está pagada o cambió el importe neto confirmado' })
   registrarOperacionCobro(@Body() dto: RegistrarOperacionCobroDto) {
     return this.cobrosService.registrarOperacionCobro(dto);
   }
@@ -796,11 +797,12 @@ export class CobrosController {
   @ApiOperation({
     summary: 'Registrar pago anual de cuotas de un socio',
     description:
-      'Genera las cuotas del año que no existan y paga todas las pendientes en una sola transacción. No aplica Tarjeta del Centro.',
+      'Genera las cuotas faltantes, descuenta el saldo individual y paga las cuotas pendientes en una sola transacción. No aplica Tarjeta del Centro.',
   })
   @ApiResponse({ status: 201, description: 'Pago anual registrado exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos o socio sin categoría' })
   @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  @ApiResponse({ status: 409, description: 'El importe confirmado ya no coincide con el importe a cobrar' })
   pagoAnual(@Body() dto: PagoAnualDto) {
     return this.cobrosService.pagoAnual(dto);
   }
