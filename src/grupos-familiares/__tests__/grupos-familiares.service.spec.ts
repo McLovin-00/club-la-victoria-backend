@@ -39,6 +39,7 @@ describe('GruposFamiliaresService', () => {
             findOne: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            remove: jest.fn(),
             createQueryBuilder: jest.fn(),
           },
         },
@@ -325,7 +326,7 @@ describe('GruposFamiliaresService', () => {
   });
 
   describe('remove', () => {
-    it('debería eliminar un grupo y desasignar sus socios', async () => {
+    it('debería eliminar un grupo y dejar que la base desasigne sus socios', async () => {
       const mockGrupo = {
         id: 1,
         nombre: 'Familia García',
@@ -335,21 +336,16 @@ describe('GruposFamiliaresService', () => {
       jest
         .spyOn(grupoRepository, 'findOne')
         .mockResolvedValue(mockGrupo as GrupoFamiliar);
-      mockQueryRunner.manager.update.mockResolvedValue({ affected: 2 });
-      mockQueryRunner.manager.remove.mockResolvedValue(mockGrupo);
+      jest
+        .spyOn(grupoRepository, 'remove')
+        .mockResolvedValue(mockGrupo as GrupoFamiliar);
 
       await service.remove(1);
 
-      expect(mockQueryRunner.manager.update).toHaveBeenCalledWith(
-        Socio,
-        { grupoFamiliar: { id: 1 } },
-        { grupoFamiliar: undefined },
-      );
-      expect(mockQueryRunner.manager.remove).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(grupoRepository.remove).toHaveBeenCalledWith(mockGrupo);
     });
 
-    it('debería hacer rollback si ocurre un error', async () => {
+    it('debería informar un error si falla la eliminación', async () => {
       const mockGrupo = {
         id: 1,
         nombre: 'Familia García',
@@ -359,10 +355,12 @@ describe('GruposFamiliaresService', () => {
       jest
         .spyOn(grupoRepository, 'findOne')
         .mockResolvedValue(mockGrupo as GrupoFamiliar);
-      mockQueryRunner.manager.update.mockRejectedValue(new Error('DB Error'));
+      jest
+        .spyOn(grupoRepository, 'remove')
+        .mockRejectedValue(new Error('DB Error'));
 
       await expect(service.remove(1)).rejects.toThrow(CustomError);
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(grupoRepository.remove).toHaveBeenCalledWith(mockGrupo);
     });
   });
 

@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -11,14 +13,17 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Private } from '../common/decorators/private.decorator';
 import { CobradoresService } from './cobradores.service';
+import { leerConsultaRendicion } from './utils/rendicion';
 import {
   ActualizarMovimientoCobradorDto,
   ConfigurarComisionCobradorDto,
+  MisCobranzasQueryDto,
   RangoFechasDto,
   RegistrarMovimientoCobradorDto,
   VincularCobradorDispositivoDto,
@@ -51,18 +56,42 @@ export class CobradoresController {
 
   @Get(':id/mis-cobranzas')
   @ApiOperation({
-    summary: 'Obtener cobranzas del cobrador por rango de fechas',
+    summary:
+      'Obtener cobranzas del cobrador por rango de fechas, búsqueda y paginación',
   })
-  @ApiResponse({ status: 200, description: 'Resumen y detalle de cobranzas' })
+  @ApiResponse({
+    status: 200,
+    description: 'Resumen y detalle paginado de cobranzas',
+  })
   misCobranzas(
     @Param('id', ParseIntPipe) cobradorId: number,
-    @Query() query: RangoFechasDto,
+    @Query() query: MisCobranzasQueryDto,
   ) {
     return this.cobradoresService.obtenerCobranzasRango(
       cobradorId,
       new Date(query.desde),
       new Date(query.hasta),
+      {
+        q: query.q,
+        offset: query.offset,
+        limit: query.limit,
+      },
     );
+  }
+
+  @Get('mobile/rendicion')
+  @ApiOperation({ summary: 'Rendición de la cobradora vinculada a este teléfono' })
+  @ApiResponse({ status: 200, description: 'Mismos datos que la rendición web' })
+  @ApiResponse({ status: 403, description: 'El teléfono no está vinculado' })
+  rendicionMobile(@Query() consulta: Record<string, unknown>) {
+    const installationId = consulta.installationId;
+    if (typeof installationId !== 'string' || installationId.trim().length === 0) {
+      throw new BadRequestException('Indicá un mes válido o un rango de fechas válido de hasta 366 días.');
+    }
+    const { desde, hasta, periodo } = leerConsultaRendicion(
+      Object.fromEntries(Object.entries(consulta).filter(([clave]) => clave !== 'installationId')),
+    );
+    return this.cobradoresService.obtenerRendicionMobile(installationId.trim(), desde, hasta, periodo);
   }
 
   @Get('mobile/socios')
@@ -154,6 +183,28 @@ export class CobradoresController {
   })
   cuentaCorriente(@Param('id', ParseIntPipe) cobradorId: number) {
     return this.cobradoresService.listarCuentaCorriente(cobradorId);
+  }
+
+  @Get(':id/rendicion')
+  @Private()
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({
+    summary: 'Obtener la rendición de cobranzas por período',
+    description: 'Devuelve importes en centavos del dinero recibido, separado por métodos de pago. Los importes no verificables no se imputan a ningún método.',
+  })
+  @ApiQuery({ name: 'periodo', required: false, example: '2026-01', description: 'Mes completo. Alternativo a desde y hasta.' })
+  @ApiQuery({ name: 'desde', required: false, example: '2026-01-01' })
+  @ApiQuery({ name: 'hasta', required: false, example: '2026-01-15' })
+  @ApiResponse({ status: 200, description: 'Detalle de recaudación verificable' })
+  @ApiResponse({ status: 400, description: 'Mes o rango de fechas inválidos' })
+  @ApiResponse({ status: 401, description: 'Se requiere sesión web' })
+  @ApiResponse({ status: 404, description: 'Cobrador no encontrado' })
+  rendicion(
+    @Param('id', ParseIntPipe) cobradorId: number,
+    @Query() consulta: Record<string, unknown>,
+  ) {
+    const { desde, hasta, periodo } = leerConsultaRendicion(consulta);
+    return this.cobradoresService.obtenerRendicion(cobradorId, desde, hasta, periodo);
   }
 
   @Post(':id/cuenta-corriente/pagos')

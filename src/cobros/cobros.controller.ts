@@ -25,6 +25,8 @@ import {
   CuotasQueryDto,
   ProcesarResultadosTarjetaCentroDto,
   ActualizarOperacionCobroDto,
+  GenerarCuotaMobileDto,
+  RegistrarCobroPeriodosMobileDto,
   // Morosos detallados
   MorososQueryDto,
   TarjetaCentroArchivoQueryDto,
@@ -38,6 +40,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
 import { EstadoCuota } from './entities/cuota.entity';
@@ -140,6 +143,7 @@ export class CobrosController {
     status: 201,
     description: 'Operación registrada exitosamente',
   })
+  @ApiResponse({ status: 409, description: 'Una cuota ya está pagada o cambió el importe neto confirmado' })
   registrarOperacionCobro(@Body() dto: RegistrarOperacionCobroDto) {
     return this.cobrosService.registrarOperacionCobro(dto);
   }
@@ -407,6 +411,57 @@ export class CobrosController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   generarCuotasSeleccion(@Body() dto: GenerarCuotasSeleccionDto) {
     return this.cobrosService.generarCuotasSeleccion(dto);
+  }
+
+  // Intentionally public for the private mobile app; this route is also callable outside the app.
+  @Post('mobile/socios/:socioId/cuotas')
+  @ApiOperation({
+    summary: 'Generate a quota for one mobile member',
+    description:
+      'Unauthenticated endpoint. Each request targets exactly one member and one YYYY-MM period. Applies the existing morosidad warning and MOROSO rules.',
+    security: [],
+  })
+  @ApiParam({
+    name: 'socioId',
+    description: 'ID of the single member for whom to generate a quota',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Quota generation result for one member',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid member ID or period' })
+  generarCuotaMobile(
+    @Param('socioId', ParseIntPipe) socioId: number,
+    @Body() dto: GenerarCuotaMobileDto,
+  ) {
+    return this.cobrosService.generarCuotasSeleccion({
+      periodo: dto.periodo,
+      socioIds: [socioId],
+    });
+  }
+
+  @Post('mobile/socios/:socioId/cobro-periodos')
+  @ApiOperation({
+    summary: 'Registrar un cobro móvil de varios períodos',
+    description: 'Operación pública para un socio; genera y cobra períodos en una transacción.',
+    security: [],
+  })
+  registrarCobroPeriodosMobile(
+    @Param('socioId', ParseIntPipe) socioId: number,
+    @Body() dto: RegistrarCobroPeriodosMobileDto,
+  ) {
+    return this.cobrosService.registrarCobroPeriodosMobile(socioId, dto);
+  }
+
+  @Get('mobile/socios/:socioId/periodos')
+  @ApiOperation({
+    summary: 'Consultar períodos para cobro móvil',
+    description: 'Consulta pública para un solo socio, con monto mensual y períodos ya pagados.',
+    security: [],
+  })
+  obtenerPeriodosCobroMobile(@Param('socioId', ParseIntPipe) socioId: number) {
+    return this.cobrosService.obtenerPeriodosCobroMobile(socioId);
   }
 
   // ==================== ESTADO DE PAGOS ANUAL ====================
@@ -742,11 +797,12 @@ export class CobrosController {
   @ApiOperation({
     summary: 'Registrar pago anual de cuotas de un socio',
     description:
-      'Genera las cuotas del año que no existan y paga todas las pendientes en una sola transacción. No aplica Tarjeta del Centro.',
+      'Genera las cuotas faltantes, descuenta el saldo individual y paga las cuotas pendientes en una sola transacción. No aplica Tarjeta del Centro.',
   })
   @ApiResponse({ status: 201, description: 'Pago anual registrado exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos o socio sin categoría' })
   @ApiResponse({ status: 404, description: 'Socio no encontrado' })
+  @ApiResponse({ status: 409, description: 'El importe confirmado ya no coincide con el importe a cobrar' })
   pagoAnual(@Body() dto: PagoAnualDto) {
     return this.cobrosService.pagoAnual(dto);
   }

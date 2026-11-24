@@ -76,6 +76,7 @@ describe('TarjetaCentro23fService', () => {
     direccion: undefined,
     estado: 'ACTIVO',
     genero: 'MASCULINO',
+    declaracionJurada: false,
     overrideManual: false,
     fotoUrl: undefined,
     tarjetaCentro,

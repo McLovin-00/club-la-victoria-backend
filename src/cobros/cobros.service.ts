@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
@@ -12,6 +13,7 @@ import { PagoCuota } from './entities/pago-cuota.entity';
 import {
   ActorCobro,
   CobroOperacion,
+  OrigenCobro,
 } from './entities/cobro-operacion.entity';
 import { CreditoIndividual } from '../credito/entities/credito-individual.entity';
 import { CobradorComisionConfig } from '../cobradores/entities/cobrador-comision-config.entity';
@@ -38,6 +40,7 @@ import {
   RegistrarPagoDto,
   RegistrarPagoMultipleDto,
   RegistrarOperacionCobroDto,
+  RegistrarCobroPeriodosMobileDto,
   RegistrarCobroGrupalDto,
   RegistrarPagoCuotasSeleccionadasDto,
   ReciboMultipleCuotasDto,
@@ -594,7 +597,120 @@ export class CobrosService {
     }
   }
 
-  async registrarOperacionCobro(dto: RegistrarOperacionCobroDto) {
+  async obtenerPeriodosCobroMobile(socioId: number) {
+    const socio = await this.socioRepository.findOne({
+      where: { id: socioId },
+      relations: ['categoria'],
+    });
+    if (!socio) {
+      throw new CustomError('Socio no encontrado', 404, ERROR_CODES.SOCIO_NOT_FOUND);
+    }
+    const pagadas = await this.cuotaRepository.find({
+      where: { socioId, estado: EstadoCuota.PAGADA },
+      select: ['periodo'],
+    });
+    return {
+      montoMensual: socio.categoria && !socio.categoria.exento
+        ? Number(socio.categoria.montoMensual)
+        : null,
+      periodosPagados: pagadas.map((cuota) => cuota.periodo),
+    };
+  }
+
+  private async validarReintentoPeriodosMobile(
+    queryRunner: import('typeorm').QueryRunner,
+    operacion: CobroOperacion,
+    dto: RegistrarOperacionCobroDto,
+    mobile: { periodos: string[]; totalCuotasEsperado: number; creditoEsperado: number; requestHash: string },
+  ): Promise<void> {
+    const receipts: Array<{ request_hash: string }> = await queryRunner.query(
+      'SELECT request_hash FROM cobro_mobile_request WHERE id_cobro_operacion = $1',
+      [operacion.id],
+    );
+    const lineasCuota = (operacion.lineas ?? []).filter((linea) => linea.tipoLinea === TipoLineaCobro.CUOTA);
+    const periodosGuardados = lineasCuota.map((linea) => linea.cuota?.periodo).sort();
+    const periodosSolicitados = [...mobile.periodos].sort();
+    const montoCuotas = lineasCuota.reduce((total, linea) => total + Number(linea.monto), 0);
+    const pagosGuardados = new Map<number, number>();
+    for (const pago of operacion.pagos ?? []) {
+      if (pago.metodoPagoId == null) {
+        throw new CustomError('La operación previa no tiene un método de pago válido', 409, ERROR_CODES.VALIDATION_ERROR);
+      }
+      pagosGuardados.set(pago.metodoPagoId, (pagosGuardados.get(pago.metodoPagoId) ?? 0) + this.toCents(Number(pago.montoPagado)));
+    }
+    const pagosSolicitados = new Map((dto.pagos ?? [])
+      .filter((pago) => this.toCents(Number(pago.monto)) !== 0)
+      .map((pago) => [pago.metodoPagoId, this.toCents(Number(pago.monto))]));
+    const metodosCoinciden = pagosGuardados.size === pagosSolicitados.size &&
+      [...pagosGuardados].every(([id, monto]) => pagosSolicitados.get(id) === monto);
+    const conceptosGuardados = (operacion.lineas ?? [])
+      .filter((linea) => linea.tipoLinea === TipoLineaCobro.CONCEPTO)
+      .map((linea) => [linea.concepto, linea.descripcion ?? null, this.toCents(Number(linea.monto))]);
+    const conceptosSolicitados = (dto.conceptos ?? [])
+      .map((concepto) => [concepto.concepto, concepto.descripcion ?? null, this.toCents(Number(concepto.monto))]);
+    if (
+      operacion.socioId !== dto.socioId ||
+      receipts.length !== 1 || receipts[0].request_hash !== mobile.requestHash ||
+      operacion.cobradorId !== dto.cobradorId ||
+      !metodosCoinciden ||
+      JSON.stringify(conceptosGuardados) !== JSON.stringify(conceptosSolicitados) ||
+      JSON.stringify(periodosGuardados) !== JSON.stringify(periodosSolicitados) ||
+      this.toCents(montoCuotas) !== this.toCents(mobile.totalCuotasEsperado) ||
+      this.toCents(Number(operacion.total)) !== this.toCents(Number(dto.total))
+    ) {
+      throw new CustomError('La clave de operación ya se usó para otro cobro', 409, ERROR_CODES.VALIDATION_ERROR);
+    }
+  }
+
+  async registrarCobroPeriodosMobile(
+    socioId: number,
+    dto: RegistrarCobroPeriodosMobileDto,
+  ) {
+    const { periodos, totalCuotasEsperado, creditoEsperado, ...pago } = dto;
+    const requestHash = createHash('sha256').update(JSON.stringify({
+      socioId,
+      periodos: [...periodos].sort(),
+      pagos: dto.pagos,
+      conceptos: dto.conceptos ?? [],
+      cobradorId: dto.cobradorId,
+      installationId: dto.installationId,
+      total: dto.total,
+      totalCuotasEsperado,
+      creditoEsperado,
+    })).digest('hex');
+    return this.registrarOperacionCobro(
+      {
+        ...pago,
+        socioId,
+        actorCobro: ActorCobro.COBRADOR,
+        origenCobro: OrigenCobro.MOBILE,
+        metodoPagoId: dto.pagos[0].metodoPagoId,
+      },
+      { periodos, totalCuotasEsperado, creditoEsperado, requestHash },
+    );
+  }
+
+  private validarNetoEnReintento(
+    operacion: CobroOperacion,
+    dto: RegistrarOperacionCobroDto,
+  ): void {
+    if (dto.montoNetoEsperado === undefined) return;
+
+    const { totalCargos, creditoAplicado } = operacion;
+    if (
+      operacion.socioId !== dto.socioId ||
+      totalCargos == null || creditoAplicado == null ||
+      this.toCents(Number(totalCargos)) - this.toCents(Number(creditoAplicado)) !==
+        this.toCents(dto.montoNetoEsperado)
+    ) {
+      throw new CustomError('La clave de operación ya se usó para otro cobro', 409, ERROR_CODES.VALIDATION_ERROR);
+    }
+  }
+
+  async registrarOperacionCobro(
+    dto: RegistrarOperacionCobroDto,
+    mobile?: { periodos: string[]; totalCuotasEsperado: number; creditoEsperado: number; requestHash: string },
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -605,14 +721,68 @@ export class CobrosService {
           CobroOperacion,
           {
             where: { idempotencyKey: dto.idempotencyKey },
-            relations: ['lineas'],
+            relations: mobile ? ['lineas', 'lineas.cuota', 'pagos'] : ['lineas'],
           },
         );
 
         if (operacionExistente) {
+          if (mobile) await this.validarReintentoPeriodosMobile(queryRunner, operacionExistente, dto, mobile);
+          this.validarNetoEnReintento(operacionExistente, dto);
           await queryRunner.commitTransaction();
           return operacionExistente;
         }
+      }
+
+      if (mobile) {
+        const socioBloqueado = await queryRunner.manager.findOne(Socio, {
+          where: { id: dto.socioId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!socioBloqueado) {
+          throw new CustomError('Socio no encontrado', 404, ERROR_CODES.SOCIO_NOT_FOUND);
+        }
+        const repetida = await queryRunner.manager.findOne(CobroOperacion, {
+          where: { idempotencyKey: dto.idempotencyKey },
+          relations: ['lineas', 'lineas.cuota', 'pagos'],
+        });
+        if (repetida) {
+          await this.validarReintentoPeriodosMobile(queryRunner, repetida, dto, mobile);
+          this.validarNetoEnReintento(repetida, dto);
+          await queryRunner.commitTransaction();
+          return repetida;
+        }
+        const socio = await queryRunner.manager.findOne(Socio, {
+          where: { id: dto.socioId },
+          relations: ['categoria'],
+        });
+        const existentes = await queryRunner.manager.find(Cuota, {
+          where: { socioId: dto.socioId, periodo: In(mobile.periodos) },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (existentes.some((cuota) => cuota.estado === EstadoCuota.PAGADA)) {
+          throw new CustomError(ERROR_MESSAGES.CUOTA_YA_PAGADA, 409, ERROR_CODES.CUOTA_YA_PAGADA);
+        }
+        const periodosExistentes = new Set(existentes.map((cuota) => cuota.periodo));
+        const faltantes = mobile.periodos.filter((periodo) => !periodosExistentes.has(periodo));
+        if (faltantes.length && (!socio?.categoria || socio.categoria.exento)) {
+          throw new CustomError('El socio no tiene una categoría válida para generar cuotas', 400, ERROR_CODES.VALIDATION_ERROR);
+        }
+        const creadas: Cuota[] = [];
+        for (const periodo of faltantes) {
+          const cuota = queryRunner.manager.create(Cuota, {
+            socioId: dto.socioId,
+            periodo,
+            monto: socio!.categoria!.montoMensual,
+            estado: EstadoCuota.PENDIENTE,
+          });
+          creadas.push(await queryRunner.manager.save(cuota));
+        }
+        const cuotasMobile = [...existentes, ...creadas];
+        const totalReal = cuotasMobile.reduce((sum, cuota) => sum + Number(cuota.monto), 0);
+        if (this.toCents(totalReal) !== this.toCents(mobile.totalCuotasEsperado)) {
+          throw new CustomError('El monto de las cuotas cambió; revisá el resumen antes de cobrar', 409, ERROR_CODES.VALIDATION_ERROR);
+        }
+        dto = { ...dto, cuotaIds: cuotasMobile.map((cuota) => cuota.id) };
       }
 
       const cuotaIdsUnicos = dto.cuotaIds
@@ -690,6 +860,16 @@ export class CobrosService {
         // = creditoAplicado + remaining saldo after application
         creditoDisponibleAntes = this.toCents(resultAplicar.creditoAplicado + resultAplicar.nuevoSaldo);
         saldoCreditoDespues = this.toCents(resultAplicar.nuevoSaldo);
+        if (mobile && creditoDisponibleAntes !== this.toCents(mobile.creditoEsperado)) {
+          throw new CustomError('El saldo a favor cambió; revisá el resumen antes de cobrar', 409, ERROR_CODES.VALIDATION_ERROR);
+        }
+      }
+      if (dto.montoNetoEsperado !== undefined && montoACobrar !== this.toCents(dto.montoNetoEsperado)) {
+        throw new CustomError(
+          'El importe del cobro cambió. Revisá el total actualizado y confirmá nuevamente.',
+          409,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
       }
 
       // ==================== CRÉDITO RESUMEN (para respuesta) ====================
@@ -802,14 +982,20 @@ export class CobrosService {
             : undefined,
         idempotencyKey: dto.idempotencyKey,
         total: this.fromCents(totalInformado),
-        totalCargos: this.fromCents(totalCargos),
-        creditoAplicado: this.fromCents(creditoAplicado),
+        totalCargos: dto.montoNetoEsperado === undefined ? this.fromCents(totalCargos) : totalCargos / 100,
+        creditoAplicado: dto.montoNetoEsperado === undefined ? this.fromCents(creditoAplicado) : creditoAplicado / 100,
         creditoGenerado: this.fromCents(creditoGenerado),
         referencia: dto.referencia,
         observaciones: dto.observaciones,
       });
 
       const operacionGuardada = await queryRunner.manager.save(operacion);
+      if (mobile) {
+        await queryRunner.query(
+          'INSERT INTO cobro_mobile_request (id_cobro_operacion, request_hash) VALUES ($1, $2)',
+          [operacionGuardada.id, mobile.requestHash],
+        );
+      }
 
       if (
         dto.actorCobro === ActorCobro.COBRADOR &&
@@ -1020,10 +1206,12 @@ export class CobrosService {
       if (dto.idempotencyKey && this.esConflictoUnicoDeIdempotencia(error)) {
         const operacionExistente = await this.cobroOperacionRepository.findOne({
           where: { idempotencyKey: dto.idempotencyKey },
-          relations: ['lineas'],
+          relations: mobile ? ['lineas', 'lineas.cuota', 'pagos'] : ['lineas'],
         });
 
         if (operacionExistente) {
+          if (mobile) await this.validarReintentoPeriodosMobile(queryRunner, operacionExistente, dto, mobile);
+          this.validarNetoEnReintento(operacionExistente, dto);
           return operacionExistente;
         }
       }
@@ -3811,16 +3999,15 @@ export class CobrosService {
         .createQueryBuilder(Cuota, 'cuota')
         .where('cuota.socioId = :socioId', { socioId: dto.socioId })
         .andWhere('cuota.periodo LIKE :anio', { anio: `${dto.anio}-%` })
+        .setLock('pessimistic_write')
         .getMany();
 
       const cuotasPorPeriodo = new Map(cuotasExistentes.map((c) => [c.periodo, c]));
 
       const fechaPago = new Date();
       let cuotasGeneradas = 0;
-      let cuotasPagadas = 0;
       let cuotasYaPagadas = 0;
-      let totalPagado = 0;
-      const periodosPagados: string[] = [];
+      const cuotasAPagar: Cuota[] = [];
 
       for (let mes = 1; mes <= 12; mes++) {
         const periodo = `${dto.anio}-${String(mes).padStart(2, '0')}`;
@@ -3843,10 +4030,40 @@ export class CobrosService {
           cuotasYaPagadas++;
           continue;
         }
+        cuotasAPagar.push(cuota);
+      }
+
+      const totalPagadoCents = cuotasAPagar.reduce(
+        (suma, cuota) => suma + this.toCents(Number(cuota.monto)),
+        0,
+      );
+      const totalPagado = totalPagadoCents / 100;
+      const creditoAplicadoCents = totalPagadoCents > 0
+        ? this.toCents((await this.creditoService.aplicarCreditoIndividual(
+            queryRunner, dto.socioId, totalPagado,
+          )).creditoAplicado)
+        : 0;
+      const montoCobradoCents = totalPagadoCents - creditoAplicadoCents;
+      if (
+        dto.montoCobradoEsperado !== undefined &&
+        this.toCents(dto.montoCobradoEsperado) !== montoCobradoCents
+      ) {
+        throw new CustomError(
+          'El importe del pago anual cambió. Revisá el total actualizado y confirmá nuevamente.',
+          409,
+          ERROR_CODES.VALIDATION_ERROR,
+        );
+      }
+
+      let creditoRestanteCents = creditoAplicadoCents;
+      for (const cuota of cuotasAPagar) {
+        const montoCuotaCents = this.toCents(Number(cuota.monto));
+        const saldoAplicadoCents = Math.min(montoCuotaCents, creditoRestanteCents);
+        creditoRestanteCents -= saldoAplicadoCents;
 
         const pago = queryRunner.manager.create(PagoCuota, {
           cuotaId: cuota.id,
-          montoPagado: cuota.monto,
+          montoPagado: (montoCuotaCents - saldoAplicadoCents) / 100,
           metodoPagoId: dto.metodoPagoId,
           observaciones: dto.observaciones,
           fechaPago,
@@ -3857,10 +4074,6 @@ export class CobrosService {
         cuota.estado = EstadoCuota.PAGADA;
         cuota.fechaPago = fechaPago;
         await queryRunner.manager.save(cuota);
-
-        totalPagado += Number(cuota.monto);
-        cuotasPagadas++;
-        periodosPagados.push(periodo);
       }
 
       await this.recalcularEstadoSocioPorMorosidad(queryRunner, dto.socioId);
@@ -3868,10 +4081,12 @@ export class CobrosService {
 
       return {
         cuotasGeneradas,
-        cuotasPagadas,
+        cuotasPagadas: cuotasAPagar.length,
         cuotasYaPagadas,
-        totalPagado: this.fromCents(this.toCents(totalPagado)),
-        periodosPagados,
+        totalPagado,
+        creditoAplicado: creditoAplicadoCents / 100,
+        montoCobrado: montoCobradoCents / 100,
+        periodosPagados: cuotasAPagar.map((cuota) => cuota.periodo),
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();

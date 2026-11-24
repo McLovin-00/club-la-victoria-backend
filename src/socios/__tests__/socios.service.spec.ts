@@ -302,6 +302,9 @@ describe('SociosService', () => {
         1,
         10,
         'Juan',
+        undefined,
+        undefined,
+        undefined,
       );
       expect(result.data).toHaveLength(1);
     });

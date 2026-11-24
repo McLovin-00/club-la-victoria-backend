@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
 import {
   Cobrador,
   CobradorComisionConfig,
@@ -33,6 +33,7 @@ import {
   SOCIO_NAME_DNI_SEARCH_FIELDS,
 } from '../common/utils/search.utils';
 import { CreditoService } from '../credito/credito.service';
+import { armarRendicion, rangoRendicion } from './utils/rendicion';
 
 @Injectable()
 export class CobradoresService {
@@ -102,19 +103,125 @@ export class CobradoresService {
     return this.dispositivoRepository.save(vinculo);
   }
 
-  async obtenerCobranzasRango(cobradorId: number, desde: Date, hasta: Date) {
-    const operaciones = await this.operacionRepository.find({
-      where: {
+  async obtenerCobranzasRango(
+    cobradorId: number,
+    desde: Date,
+    hasta: Date,
+    opciones?: { q?: string; offset?: number; limit?: number },
+  ) {
+    const search = opciones?.q?.trim() ?? '';
+    const hasPagination =
+      opciones?.offset !== undefined || opciones?.limit !== undefined;
+    const offset = Math.max(0, opciones?.offset ?? 0);
+    const limit = Math.min(100, Math.max(1, opciones?.limit ?? 15));
+
+    const crearBaseQb = () => {
+      const qb = this.operacionRepository
+        .createQueryBuilder('op')
+        .leftJoin('op.socio', 'socio')
+        .leftJoin('op.metodoPago', 'metodoPago')
+        .where('op.cobradorId = :cobradorId', { cobradorId })
+        .andWhere('op.actorCobro = :actorCobro', {
+          actorCobro: ActorCobro.COBRADOR,
+        })
+        .andWhere('op.fechaHoraServidor BETWEEN :desde AND :hasta', {
+          desde,
+          hasta,
+        });
+
+      if (search) {
+        const words = search.split(/\s+/).filter((w) => w.length > 0);
+        words.forEach((word, idx) => {
+          const pText = `mcTerm${idx}`;
+          const pId = `mcId${idx}`;
+          const cleanId = word.replace(/^#/, '');
+          qb.andWhere(
+            `(unaccent(COALESCE(socio.nombre, '')) ILIKE unaccent(:${pText}) OR unaccent(COALESCE(socio.apellido, '')) ILIKE unaccent(:${pText}) OR COALESCE(socio.dni, '') ILIKE :${pText} OR unaccent(COALESCE(metodoPago.nombre, '')) ILIKE unaccent(:${pText}) OR CAST(op.id AS TEXT) ILIKE :${pId})`,
+            {
+              [pText]: `%${word}%`,
+              [pId]: `%${cleanId}%`,
+            },
+          );
+        });
+      }
+
+      return qb;
+    };
+
+    const resumen = await crearBaseQb()
+      .select('COUNT(op.id)', 'total')
+      .addSelect('COALESCE(SUM(op.total), 0)', 'totalCobrado')
+      .getRawOne<{ total?: string | number; totalCobrado?: string | number }>();
+
+    const total = Number(resumen?.total ?? 0);
+    const totalCobrado = Math.round(Number(resumen?.totalCobrado ?? 0));
+    const totalPeriodo =
+      search && total === 0
+        ? await this.operacionRepository.count({
+            where: {
+              cobradorId,
+              actorCobro: ActorCobro.COBRADOR,
+              fechaHoraServidor: Between(desde, hasta),
+            },
+          })
+        : total;
+
+    if (total === 0) {
+      return {
         cobradorId,
-        actorCobro: ActorCobro.COBRADOR,
-        fechaHoraServidor: Between(desde, hasta),
-      },
-      relations: ['lineas', 'lineas.cuota', 'socio', 'socio.creditoIndividual', 'metodoPago'],
-      order: { fechaHoraServidor: 'DESC' },
+        desde,
+        hasta,
+        totalCobrado: 0,
+        total: 0,
+        totalPeriodo,
+        offset: hasPagination ? offset : 0,
+        limit: hasPagination ? limit : 0,
+        hasMore: false,
+        operaciones: [],
+      };
+    }
+
+    const idsQb = crearBaseQb()
+      .select('op.id', 'id')
+      .orderBy('op.fechaHoraServidor', 'DESC')
+      .addOrderBy('op.id', 'DESC');
+
+    if (hasPagination) {
+      idsQb.offset(offset).limit(limit);
+    }
+
+    const idRows = await idsQb.getRawMany<{ id: number | string }>();
+    const pageIds = idRows.map((row) => Number(row.id));
+
+    if (pageIds.length === 0) {
+      return {
+        cobradorId,
+        desde,
+        hasta,
+        totalCobrado,
+        total,
+        totalPeriodo: Math.max(totalPeriodo, total),
+        offset,
+        limit: hasPagination ? limit : total,
+        hasMore: false,
+        operaciones: [],
+      };
+    }
+
+    const entidades = await this.operacionRepository.find({
+      where: { id: In(pageIds) },
+      relations: [
+        'lineas',
+        'lineas.cuota',
+        'socio',
+        'socio.creditoIndividual',
+        'metodoPago',
+      ],
     });
 
-    const totalCobrado = Math.round(
-      operaciones.reduce((acc, op) => acc + Number(op.total), 0),
+    const ordenMap = new Map(pageIds.map((id, index) => [id, index]));
+    entidades.sort(
+      (a, b) => (ordenMap.get(a.id) ?? 0) - (ordenMap.get(b.id) ?? 0),
     );
 
     return {
@@ -122,8 +229,53 @@ export class CobradoresService {
       desde,
       hasta,
       totalCobrado,
-      operaciones,
+      total,
+      totalPeriodo: Math.max(totalPeriodo, total),
+      offset: hasPagination ? offset : 0,
+      limit: hasPagination ? limit : total,
+      hasMore: hasPagination ? offset + entidades.length < total : false,
+      operaciones: entidades,
     };
+  }
+
+  async obtenerRendicion(cobradorId: number, desde?: string, hasta?: string, periodo?: string) {
+    const rango = rangoRendicion(desde, hasta, periodo);
+    const cobrador = await this.cobradorRepository.findOne({
+      where: { id: cobradorId },
+      select: ['id', 'nombre'],
+    });
+    if (!cobrador) {
+      throw new CustomError('Cobrador no encontrado', 404, ERROR_CODES.SOCIO_NOT_FOUND);
+    }
+    const operaciones = await this.operacionRepository.find({
+      where: {
+        cobradorId,
+        actorCobro: ActorCobro.COBRADOR,
+        fechaHoraServidor: Between(rango.inicio, rango.finInclusivo),
+      },
+      relations: ['socio', 'lineas', 'lineas.cuota', 'pagos', 'pagos.metodoPago'],
+      relationLoadStrategy: 'query',
+      order: { fechaHoraServidor: 'ASC', id: 'ASC' },
+    });
+    return {
+      cobrador: cobrador.nombre,
+      desde: rango.desde,
+      hasta: rango.hasta,
+      ...armarRendicion(operaciones),
+    };
+  }
+
+  async obtenerRendicionMobile(
+    installationId: string,
+    desde?: string,
+    hasta?: string,
+    periodo?: string,
+  ) {
+    const vinculo = await this.dispositivoRepository.findOne({ where: { installationId } });
+    if (!vinculo) {
+      throw new CustomError('No autorizado para ver esta rendición', 403, ERROR_CODES.FORBIDDEN);
+    }
+    return this.obtenerRendicion(vinculo.cobradorId, desde, hasta, periodo);
   }
 
   async configurarComision(

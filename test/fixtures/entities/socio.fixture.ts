@@ -13,6 +13,7 @@ export const socioFixture: Socio = {
   direccion: 'Calle Test 123',
   estado: 'ACTIVO',
   genero: 'MASCULINO',
+  declaracionJurada: false,
   overrideManual: false,
   tarjetaCentro: false,
   temporadas: [],
