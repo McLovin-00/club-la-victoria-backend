@@ -11,6 +11,7 @@ import {
   ERROR_MESSAGES,
   ERROR_CODES,
 } from 'src/constants/errors/error-messages';
+import { format, toZonedTime } from 'date-fns-tz';
 import {
   applyMultiWordSearch,
   DEFAULT_SOCIO_SEARCH_FIELDS,
@@ -144,6 +145,7 @@ export class TemporadasService {
       .where('asociacion.temporada.id = :id', { id })
       .select([
         'asociacion.id',
+        'asociacion.certificadoMedicoPresentado',
         'socio.id',
         'socio.nombre',
         'socio.apellido',
@@ -164,7 +166,63 @@ export class TemporadasService {
     return socios.map((asociacion) => ({
       id: asociacion.socio.id,
       socio: asociacion.socio,
+      certificadoMedicoPresentado: asociacion.certificadoMedicoPresentado,
     }));
+  }
+
+  async actualizarCertificadoMedico(
+    temporadaId: number,
+    socioId: number,
+    certificadoMedicoPresentado: boolean,
+  ) {
+    const temporada = await this.temporadaRepository.findOne({
+      where: { id: temporadaId },
+    });
+
+    if (!temporada) {
+      throw new CustomError(
+        ERROR_MESSAGES.TEMPORADA_NOT_FOUND,
+        404,
+        ERROR_CODES.TEMPORADA_NOT_FOUND,
+      );
+    }
+
+    const hoy = format(
+      toZonedTime(new Date(), 'America/Argentina/Buenos_Aires'),
+      'yyyy-MM-dd',
+    );
+
+    if (temporada.fechaFin < hoy) {
+      throw new CustomError(
+        ERROR_MESSAGES.TEMPORADA_FINALIZADA,
+        400,
+        ERROR_CODES.TEMPORADA_FINALIZADA,
+      );
+    }
+
+    const asociacion = await this.asociacionesRepository.findOne({
+      where: {
+        temporada: { id: temporadaId },
+        socio: { id: socioId },
+      },
+    });
+
+    if (!asociacion) {
+      throw new CustomError(
+        ERROR_MESSAGES.ASOCIACION_NOT_FOUND,
+        404,
+        ERROR_CODES.ASOCIACION_NOT_FOUND,
+      );
+    }
+
+    asociacion.certificadoMedicoPresentado = certificadoMedicoPresentado;
+    const actualizada = await this.asociacionesRepository.save(asociacion);
+
+    return {
+      temporadaId,
+      socioId,
+      certificadoMedicoPresentado: actualizada.certificadoMedicoPresentado,
+    };
   }
 
   async agregarSocioATemporada(id: number, socioId: number) {

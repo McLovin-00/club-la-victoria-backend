@@ -575,6 +575,7 @@ describe('SociosService', () => {
 
       expect(result.socio).toBeNull();
       expect(result.tipoPersona).toBe('No Socio');
+      expect(result.certificadoMedicoPresentado).toBeNull();
     });
 
     it('debería retornar SOCIO_CLUB si no hay temporada activa', async () => {
@@ -585,17 +586,44 @@ describe('SociosService', () => {
 
       expect(result.socio).toBeDefined();
       expect(result.tipoPersona).toBe('Socio Club');
+      expect(result.certificadoMedicoPresentado).toBeNull();
     });
 
-    it('debería retornar SOCIO_PILETA si tiene inscripción en temporada actual', async () => {
+    it('debería dejar el estado en null si no está asociado a la temporada activa', async () => {
+      mockSocioRepository.findOne.mockResolvedValue(mockSocio);
+      mockTemporadaPiletaRepository.findOne.mockResolvedValue({ id: 1 });
+      mockAsociacionesRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.findSocioConTipo('12345678');
+
+      expect(result.tipoPersona).toBe('Socio Club');
+      expect(result.certificadoMedicoPresentado).toBeNull();
+    });
+
+    it('debería retornar el estado del certificado de la temporada actual', async () => {
+      mockSocioRepository.findOne.mockResolvedValue(mockSocio);
+      mockTemporadaPiletaRepository.findOne.mockResolvedValue({ id: 1 });
+      mockAsociacionesRepository.findOne.mockResolvedValue({
+        id: 1,
+        certificadoMedicoPresentado: true,
+      });
+
+      const result = await service.findSocioConTipo('12345678');
+
+      expect(result.socio).toBeDefined();
+      expect(result.tipoPersona).toBe('Socio Pileta');
+      expect(result.certificadoMedicoPresentado).toBe(true);
+    });
+
+    it('debería considerar pendiente el certificado de una asociación sin estado', async () => {
       mockSocioRepository.findOne.mockResolvedValue(mockSocio);
       mockTemporadaPiletaRepository.findOne.mockResolvedValue({ id: 1 });
       mockAsociacionesRepository.findOne.mockResolvedValue({ id: 1 });
 
       const result = await service.findSocioConTipo('12345678');
 
-      expect(result.socio).toBeDefined();
       expect(result.tipoPersona).toBe('Socio Pileta');
+      expect(result.certificadoMedicoPresentado).toBe(false);
     });
 
     it('debería buscar por ID si el identificador es numérico corto', async () => {

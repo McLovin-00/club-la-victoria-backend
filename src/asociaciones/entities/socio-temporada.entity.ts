@@ -20,6 +20,13 @@ export class SocioTemporada {
   })
   fechaHoraInscripcion!: string;
 
+  @Column({
+    type: 'boolean',
+    default: false,
+    name: 'certificado_medico_presentado',
+  })
+  certificadoMedicoPresentado!: boolean;
+
   @ManyToOne(() => Socio, (socio) => socio.temporadas, {
     onDelete: 'CASCADE',
     onUpdate: 'CASCADE',

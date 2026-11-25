@@ -181,7 +181,8 @@ export class SociosController {
   @ApiOperation({
     summary: 'Buscar socio por DNI o ID para registro',
     description:
-      'Busca un socio por DNI o ID y devuelve sus datos junto con su tipo (SOCIO_CLUB, SOCIO_PILETA o NO_SOCIO)',
+      'Busca un socio por DNI o ID y devuelve sus datos junto con su tipo y el estado del certificado médico para la temporada vigente. Este endpoint es público.',
+    security: [],
   })
   @ApiParam({
     name: 'identifier',
@@ -192,6 +193,24 @@ export class SociosController {
   @ApiResponse({
     status: 200,
     description: 'Información del socio y su tipo',
+    schema: {
+      type: 'object',
+      required: ['socio', 'tipoPersona', 'certificadoMedicoPresentado'],
+      properties: {
+        socio: {
+          type: 'object',
+          nullable: true,
+          description: 'Datos del socio o null cuando no existe',
+        },
+        tipoPersona: { type: 'string' },
+        certificadoMedicoPresentado: {
+          type: 'boolean',
+          nullable: true,
+          description:
+            'true o false para una inscripción en la temporada vigente; null si el estado no aplica',
+        },
+      },
+    },
   })
   async findForRegistro(@Param('identifier') identifier: string) {
     const persona = await this.sociosService.findSocioConTipo(identifier);

@@ -365,7 +365,11 @@ export class SociosService {
     }
 
     if (!socio) {
-      return { socio: null, tipoPersona: TipoPersona.NOSOCIO };
+      return {
+        socio: null,
+        tipoPersona: TipoPersona.NOSOCIO,
+        certificadoMedicoPresentado: null,
+      };
     }
 
     const hoy = format(
@@ -381,6 +385,7 @@ export class SociosService {
 
     let tipoPersona: TipoPersona.SOCIOCLUB | TipoPersona.SOCIOPILETA =
       TipoPersona.SOCIOCLUB;
+    let certificadoMedicoPresentado: boolean | null = null;
 
     if (temporadaActual) {
       const inscripcion = await this.asociacionesRepository.findOne({
@@ -392,10 +397,12 @@ export class SociosService {
 
       if (inscripcion) {
         tipoPersona = TipoPersona.SOCIOPILETA;
+        certificadoMedicoPresentado =
+          inscripcion.certificadoMedicoPresentado ?? false;
       }
     }
 
-    return { socio, tipoPersona };
+    return { socio, tipoPersona, certificadoMedicoPresentado };
   }
 
   async findOneByDniReserva(dni: string) {

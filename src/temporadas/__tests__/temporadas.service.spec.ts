@@ -171,6 +171,95 @@ describe('TemporadasService', () => {
     });
   });
 
+  describe('getSocios', () => {
+    it('debería incluir el estado del certificado de la asociación', async () => {
+      const socio = { ...socioFixture, id: 7 };
+      const asociacion = {
+        id: 12,
+        socio,
+        certificadoMedicoPresentado: true,
+      };
+      const queryBuilder = {
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([asociacion]),
+      };
+      asociacionesRepository.createQueryBuilder.mockReturnValue(queryBuilder);
+
+      await expect(service.getSocios(3)).resolves.toEqual([
+        {
+          id: 7,
+          socio,
+          certificadoMedicoPresentado: true,
+        },
+      ]);
+      expect(queryBuilder.select).toHaveBeenCalledWith(
+        expect.arrayContaining(['asociacion.certificadoMedicoPresentado']),
+      );
+    });
+  });
+
+  describe('actualizarCertificadoMedico', () => {
+    const temporadaVigente = {
+      ...temporadaFixture,
+      id: 3,
+      fechaFin: '2999-03-31',
+    };
+    const asociacion = {
+      id: 12,
+      socio: { id: 7 },
+      temporada: { id: 3 },
+      certificadoMedicoPresentado: false,
+    };
+
+    it('debería actualizar el estado solicitado para la asociación', async () => {
+      temporadaRepository.findOne.mockResolvedValue(temporadaVigente);
+      asociacionesRepository.findOne.mockResolvedValue({ ...asociacion });
+      asociacionesRepository.save.mockImplementation(async (value) => value);
+
+      await expect(
+        service.actualizarCertificadoMedico(3, 7, true),
+      ).resolves.toEqual({
+        temporadaId: 3,
+        socioId: 7,
+        certificadoMedicoPresentado: true,
+      });
+      expect(asociacionesRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ certificadoMedicoPresentado: true }),
+      );
+    });
+
+    it('debería rechazar cambios en temporadas finalizadas', async () => {
+      temporadaRepository.findOne.mockResolvedValue({
+        ...temporadaVigente,
+        fechaFin: '2000-01-01',
+      });
+
+      await expect(
+        service.actualizarCertificadoMedico(3, 7, true),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        errorCode: ERROR_CODES.TEMPORADA_FINALIZADA,
+      });
+      expect(asociacionesRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('debería responder not found si la asociación no existe', async () => {
+      temporadaRepository.findOne.mockResolvedValue(temporadaVigente);
+      asociacionesRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.actualizarCertificadoMedico(3, 7, true),
+      ).rejects.toMatchObject({
+        statusCode: 404,
+        errorCode: ERROR_CODES.ASOCIACION_NOT_FOUND,
+      });
+    });
+  });
+
   it('debería paginar socios disponibles correctamente', async () => {
     asociacionesRepository.find.mockResolvedValue([
       {

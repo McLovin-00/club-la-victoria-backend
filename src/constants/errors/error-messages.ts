@@ -27,6 +27,8 @@ export const ERROR_MESSAGES = {
   // Errores de negocio
   SOCIO_ALREADY_REGISTERED_TODAY: 'La persona ya ingresó hoy',
   OVERLAPPING_SEASONS: 'Las fechas se solapan con otra temporada existente',
+  TEMPORADA_FINALIZADA:
+    'No se puede modificar el certificado de una temporada finalizada',
   CANNOT_DELETE_SOCIO_WITH_REGISTROS:
     'No se puede eliminar el socio porque tiene registros asociados',
 
@@ -113,6 +115,7 @@ export const ERROR_CODES = {
   // Negocio
   SOCIO_ALREADY_REGISTERED_TODAY: 'ERR_ALREADY_REGISTERED_TODAY',
   OVERLAPPING_SEASONS: 'ERR_OVERLAPPING_SEASONS',
+  TEMPORADA_FINALIZADA: 'ERR_TEMPORADA_FINALIZADA',
   CANNOT_DELETE_SOCIO: 'ERR_CANNOT_DELETE_SOCIO',
   // Categorías y cobros
   CATEGORIA_NOT_FOUND: 'ERR_CATEGORIA_NOT_FOUND',

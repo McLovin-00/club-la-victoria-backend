@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { TemporadasService } from './temporadas.service';
 import { CreateTemporadaDto } from './dto/create-temporada.dto';
+import { UpdateCertificadoMedicoDto } from './dto/update-certificado-medico.dto';
 import { Private } from 'src/common/decorators/private.decorator';
 import { PAGINATION } from 'src/constants/pagination.constants';
 import {
@@ -189,6 +190,44 @@ export class TemporadasController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   getSocios(@Param('id', ParseIntPipe) id: number) {
     return this.temporadasService.getSocios(id);
+  }
+
+  @Patch(':id/socios/:socioId/certificado-medico')
+  @Private()
+  @ApiOperation({
+    summary: 'Actualizar presentación del certificado médico',
+    description:
+      'Marca o desmarca el certificado médico para una asociación socio-temporada. No permite modificar temporadas finalizadas.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la temporada', type: Number })
+  @ApiParam({ name: 'socioId', description: 'ID del socio', type: Number })
+  @ApiBody({
+    description: 'Estado de presentación del certificado médico',
+    type: UpdateCertificadoMedicoDto,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado del certificado actualizado',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Temporada finalizada o datos inválidos',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 404,
+    description: 'Temporada o asociación no encontrada',
+  })
+  actualizarCertificadoMedico(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('socioId', ParseIntPipe) socioId: number,
+    @Body() dto: UpdateCertificadoMedicoDto,
+  ) {
+    return this.temporadasService.actualizarCertificadoMedico(
+      id,
+      socioId,
+      dto.certificadoMedicoPresentado,
+    );
   }
 
   // Metodo para agregar un socio a una temporada
