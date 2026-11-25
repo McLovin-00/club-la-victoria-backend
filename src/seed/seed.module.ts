@@ -8,6 +8,9 @@ import { SocioTemporada } from '../asociaciones/entities/socio-temporada.entity'
 import { RegistroIngreso } from '../registro-ingreso/entities/registro-ingreso.entity';
 import { CategoriaSocio } from '../categorias-socio/entities/categoria-socio.entity';
 import { GrupoFamiliar } from '../grupos-familiares/entities/grupo-familiar.entity';
+import { CreditoGrupal } from '../credito/entities/credito-grupal.entity';
+import { CreditoIndividual } from '../credito/entities/credito-individual.entity';
+import { Notificacion } from '../notificaciones/entities/notificacion.entity';
 import { PagoCuota } from '../cobros/entities/pago-cuota.entity';
 import { Cuota } from '../cobros/entities/cuota.entity';
 import { MetodoPago } from '../metodos-pago/entities/metodo-pago.entity';
@@ -43,6 +46,9 @@ import {
           SocioTemporada,
           RegistroIngreso,
           GrupoFamiliar,
+          CreditoGrupal,
+          CreditoIndividual,
+          Notificacion,
           Cuota,
           CategoriaSocio,
           PagoCuota,
